@@ -1,0 +1,59 @@
+{
+  "name": "good-car-solutions",
+  "version": "2.6.4",
+  "description": "Good Car Solutions — Vehicle Electrical & Programming Management",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "author": "Good Car Solutions",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "build": {
+    "appId": "com.goodcarsolutions.gcs",
+    "productName": "Good Car Solutions",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "src/icon.ico"
+    },
+    "forceCodeSigning": false,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Good Car Solutions"
+    },
+    "portable": {
+      "artifactName": "Good-Car-Solutions-Portable.${ext}"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "invoice-generator.js",
+      "server-client.js",
+      "src/index.html",
+      "src/logo.png",
+      "src/banner.png",
+      "src/icon.ico"
+    ],
+    "extraResources": []
+  }
+}
