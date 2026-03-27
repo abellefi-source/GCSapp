@@ -511,6 +511,7 @@ function renderJobs(){
         <span>${j.customer||'—'}</span>
         <span style="font-family:monospace">${fmtMoney(j.amount)}</span>
       </div>
+      ${j.invoiceNo?`<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;font-family:monospace">${j.invoiceViewCount>0?`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green)"></span><span style="color:var(--green);font-weight:600">Viewed${j.invoiceViewCount>1?' ('+j.invoiceViewCount+'x)':''}</span>`:`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b"></span><span style="color:#f59e0b">Invoice Sent</span>`}</div>`:''}
       ${j.vin?`<div style="font-size:11px;color:var(--dim);font-family:monospace;margin-top:4px">VIN: ${j.vin}</div>`:''}
     </div>
   `).join('')}
