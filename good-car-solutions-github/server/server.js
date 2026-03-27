@@ -163,6 +163,9 @@ app.get("/api/jobs", authRequired, (req, res) => {
   const enriched = jobs.map(j => {
     const timeline = query("SELECT * FROM job_timeline WHERE job_id = ? ORDER BY timestamp ASC", [j.id]);
     const payments = query("SELECT * FROM payments WHERE job_id = ? ORDER BY date ASC", [j.id]);
+    // Get latest invoice view tracking for this job
+    const invoiceRows = query("SELECT viewed_at, view_count FROM invoices WHERE job_id = ? ORDER BY created_at DESC LIMIT 1", [j.id]);
+    const invoiceView = invoiceRows.length ? invoiceRows[0] : null;
     return {
       id: j.id, vehicle: j.vehicle, vin: j.vin, customer: j.customer,
       customerId: j.customer_id, type: j.type, ecu: j.ecu, tools: j.tools,
@@ -173,6 +176,8 @@ app.get("/api/jobs", authRequired, (req, res) => {
       lineItems: JSON.parse(j.line_items || "[]"),
       invoiceDraft: j.invoice_draft ? JSON.parse(j.invoice_draft) : null,
       invoiceNo: j.invoice_no || "",
+      invoiceViewedAt: invoiceView?.viewed_at || "",
+      invoiceViewCount: invoiceView?.view_count || 0,
       createdAt: j.created_at, updatedAt: j.updated_at,
       notes: timeline.map(t => ({
         type: t.type, text: t.text, timestamp: t.timestamp, createdBy: t.created_by,
@@ -708,6 +713,13 @@ app.get("/invoice/:id", (req, res) => {
     const rows = query("SELECT * FROM invoices WHERE id = ?", [req.params.id]);
     if (!rows.length) return res.status(404).send("Invoice not found");
     const inv = rows[0];
+
+    // Track invoice view
+    const now = new Date().toISOString();
+    const currentCount = inv.view_count || 0;
+    run("UPDATE invoices SET viewed_at = ?, view_count = ? WHERE id = ?",
+      [now, currentCount + 1, req.params.id]);
+
     const companyName = getSetting("companyName") || "Good Car Solutions";
     // Gather images and PDFs from job timeline based on invoice settings
     let timelineImages = [];
@@ -1200,6 +1212,12 @@ async function migrateSchema() {
   }
   if (!invCols.includes("include_pdfs")) {
     try { run("ALTER TABLE invoices ADD COLUMN include_pdfs INTEGER DEFAULT 0"); console.log("  [MIGRATE] Added include_pdfs to invoices"); } catch(e) {}
+  }
+  if (!invCols.includes("viewed_at")) {
+    try { run("ALTER TABLE invoices ADD COLUMN viewed_at TEXT DEFAULT ''"); console.log("  [MIGRATE] Added viewed_at to invoices"); } catch(e) {}
+  }
+  if (!invCols.includes("view_count")) {
+    try { run("ALTER TABLE invoices ADD COLUMN view_count INTEGER DEFAULT 0"); console.log("  [MIGRATE] Added view_count to invoices"); } catch(e) {}
   }
 
   // Estimates table migrations

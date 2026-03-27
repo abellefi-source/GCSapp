@@ -215,6 +215,10 @@ function initSchema() {
       due_date TEXT DEFAULT '',
       payment_url TEXT DEFAULT '',
       created_by TEXT DEFAULT '',
+      include_images INTEGER DEFAULT 0,
+      include_pdfs INTEGER DEFAULT 0,
+      viewed_at TEXT DEFAULT '',
+      view_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
