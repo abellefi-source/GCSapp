@@ -631,6 +631,8 @@ function renderJobDetail(){
           }).join('')}
         </div>`:''}
 
+        ${bal>0&&(j.amount||0)>0?`<button class="btn" id="paidInFullBtn" style="width:100%;margin-top:10px;padding:14px;background:#1a3a2a;border:1px solid #2a4a2a;color:var(--green);font-weight:700;font-family:monospace;letter-spacing:0.5px">Paid in Full</button>`:''}
+
         <div id="payAddSection">
           <button class="btn" id="showAddPayBtn" style="width:100%;margin-top:10px;padding:14px;background:${bal<=0&&(j.amount||0)>0?'#1a3a2a':'var(--accent)'};color:${bal<=0&&(j.amount||0)>0?'var(--green)':'#0a0e13'};border:${bal<=0&&(j.amount||0)>0?'1px solid #2a4a2a':'none'}">${bal<=0&&(j.amount||0)>0?'+ Add Additional Payment':'+ Record Payment'}</button>
           <div id="payAddForm" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px">
@@ -1752,6 +1754,26 @@ function bindEvents(){
     });
     document.addEventListener('click',function(e){if(!ejCustInput.contains(e.target)&&!ejCustDrop.contains(e.target)){ejCustDrop.style.display='none';}},{capture:true});
   }
+
+  // ─── PAID IN FULL SHORTCUT ───────────────────────────────────
+  const paidInFullBtn=document.getElementById('paidInFullBtn');
+  if(paidInFullBtn)paidInFullBtn.onclick=async()=>{
+    const j=state.selectedJob;if(!j||!(j.amount>0))return;
+    paidInFullBtn.disabled=true;paidInFullBtn.textContent='...';
+    try{
+      const existing=Array.isArray(j.payments)?j.payments:[];
+      const totalPaid=existing.reduce((s,p)=>s+(p.amount||0),0);
+      const remaining=(j.amount||0)-totalPaid;
+      const fullPayment={amount:remaining>0?remaining:j.amount,note:'Paid in Full',date:new Date().toISOString(),createdBy:API.user?.displayName||API.user?.username||''};
+      const updated=remaining>0?[...existing,fullPayment]:[...existing];
+      await API.updateJob(j.id,{payments:updated,paid:true,status:'Completed'});
+      const jobs=await API.getJobs();
+      state.jobs=jobs;
+      const fresh=jobs.find(x=>x.id===j.id);
+      if(fresh)state.selectedJob=fresh;
+      render();
+    }catch(e){setState({error:e.message});paidInFullBtn.disabled=false;paidInFullBtn.textContent='Paid in Full';}
+  };
 
   // ─── PAYMENT RECORDING ─────────────────────────────────────────
   const showAddPayBtn=document.getElementById('showAddPayBtn');

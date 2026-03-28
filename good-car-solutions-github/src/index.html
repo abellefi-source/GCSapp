@@ -207,6 +207,15 @@
         setPayAmt("");setPayNote("");setShowAdd(false);
       };
 
+      const markPaidInFull=()=>{
+        if(totalDue<=0)return;
+        const remaining=totalDue-totalPaid;
+        const fullPayment={amount:remaining>0?remaining:totalDue,note:"Paid in Full",date:new Date().toISOString()};
+        const updated=remaining>0?[...payments,fullPayment]:[...payments];
+        fireConfetti("#4ade80");
+        onUpdate(job.id,{payments:updated,paid:true,status:"Completed"});
+      };
+
       const removePayment=(i)=>{
         const updated=payments.filter((_,idx)=>idx!==i);
         const nowPaid=totalDue>0&&updated.reduce((s,p)=>s+(p.amount||0),0)>=totalDue;
@@ -250,6 +259,11 @@
                 );
               })}
             </div>
+          )}
+
+          {/* Paid in Full shortcut */}
+          {!isPaidFull&&totalDue>0&&(
+            <button onClick={markPaidInFull} style={{width:"100%",marginTop:"10px",padding:"12px",background:"#1a3a2a",border:"1px solid #2a4a2a",borderRadius:"8px",color:"#4ade80",fontSize:"13px",cursor:"pointer",fontWeight:700,fontFamily:"'DM Mono',monospace",letterSpacing:"0.5px"}}>Paid in Full</button>
           )}
 
           {/* Add payment form */}
