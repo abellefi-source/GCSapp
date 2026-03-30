@@ -298,6 +298,20 @@ function initSchema() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS receptionist_calls (
+      id TEXT PRIMARY KEY,
+      call_sid TEXT DEFAULT '',
+      caller_phone TEXT DEFAULT '',
+      customer_name TEXT DEFAULT '',
+      intake_id TEXT DEFAULT '',
+      status TEXT DEFAULT 'in_progress',
+      duration INTEGER DEFAULT 0,
+      transcript TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // Create default admin if no users
   const res = query("SELECT COUNT(*) as c FROM users");
   if (res.length === 0 || res[0].c === 0) {

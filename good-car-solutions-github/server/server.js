@@ -1597,6 +1597,65 @@ async function submitForm(){
 </body></html>`;
 }
 
+// ─── AI RECEPTIONIST ─────────────────────────────────────────────
+const receptionist = require("./receptionist");
+
+// Twilio webhook endpoints (no auth — Twilio calls these directly)
+app.post("/receptionist/incoming", async (req, res) => {
+  try { await receptionist.handleIncomingCall(req, res); }
+  catch (e) { console.error("[Receptionist] incoming error:", e.message); res.sendStatus(500); }
+});
+
+app.post("/receptionist/respond", async (req, res) => {
+  try { await receptionist.handleResponse(req, res); }
+  catch (e) { console.error("[Receptionist] respond error:", e.message); res.sendStatus(500); }
+});
+
+app.post("/receptionist/status", (req, res) => {
+  try { receptionist.handleCallStatus(req, res); }
+  catch (e) { console.error("[Receptionist] status error:", e.message); res.sendStatus(500); }
+});
+
+// Admin API endpoints for receptionist settings
+app.get("/api/receptionist/settings", authRequired, adminOnly, (req, res) => {
+  res.json({ data: receptionist.getReceptionistSettings() });
+});
+
+app.put("/api/receptionist/settings", authRequired, adminOnly, (req, res) => {
+  try {
+    receptionist.updateReceptionistSettings(req.body);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/receptionist/calls", authRequired, (req, res) => {
+  const limit = parseInt(req.query.limit || "50", 10);
+  const offset = parseInt(req.query.offset || "0", 10);
+  res.json({ data: receptionist.getCallLog(limit, offset) });
+});
+
+app.get("/api/receptionist/calls/:id", authRequired, (req, res) => {
+  const call = receptionist.getCallDetail(req.params.id);
+  if (!call) return res.status(404).json({ error: "Call not found" });
+  res.json({ data: call });
+});
+
+app.post("/api/receptionist/configure-webhooks", authRequired, adminOnly, async (req, res) => {
+  try {
+    const baseUrl = req.body.baseUrl;
+    if (!baseUrl) return res.status(400).json({ error: "baseUrl is required (your public server URL)" });
+    const result = await receptionist.configureWebhooks(baseUrl);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get("/api/receptionist/status", authRequired, (req, res) => {
+  res.json({
+    configured: receptionist.isConfigured(),
+    settings: receptionist.getReceptionistSettings(),
+  });
+});
+
 // ─── MOBILE WEB APP ──────────────────────────────────────────────
 const MOBILE_DIR = path.join(__dirname, "mobile");
 if (fs.existsSync(MOBILE_DIR)) {

@@ -2285,6 +2285,172 @@
       );
     }
 
+    // ─── AI RECEPTIONIST VIEW ──────────────────────────────────────
+    function ReceptionistView({isServer,isAdmin}){
+      const[calls,setCalls]=useState([]);const[loading,setLoading]=useState(true);
+      const[tab,setTab]=useState("calls");const[settings,setSettings]=useState(null);
+      const[selectedCall,setSelectedCall]=useState(null);
+
+      const loadCalls=async()=>{
+        if(!isServer)return;
+        try{const r=await api.server.request("GET","/receptionist/calls");if(r.data)setCalls(r.data);}catch(e){}
+        setLoading(false);
+      };
+      const loadSettings=async()=>{
+        try{const r=await api.server.request("GET","/receptionist/settings");if(r.data)setSettings(r.data);}catch(e){}
+      };
+      useEffect(()=>{loadCalls();if(isAdmin)loadSettings();},[isServer]);
+
+      const saveSettings=async()=>{
+        const form={
+          twilioAccountSid:document.getElementById("rc-sid")?.value||"",
+          twilioAuthToken:document.getElementById("rc-token")?.value||"",
+          twilioPhoneNumber:document.getElementById("rc-phone")?.value||"",
+          anthropicApiKey:document.getElementById("rc-apikey")?.value||"",
+          voiceName:document.getElementById("rc-voice")?.value||"Polly.Joanna",
+          greeting:document.getElementById("rc-greeting")?.value||"",
+          maxTurns:parseInt(document.getElementById("rc-turns")?.value||"12",10)
+        };
+        try{await api.server.request("PUT","/receptionist/settings",form);await loadSettings();alert("Settings saved!");}catch(e){alert(e.message);}
+      };
+
+      const toggleEnabled=async()=>{
+        try{await api.server.request("PUT","/receptionist/settings",{enabled:!settings?.enabled});await loadSettings();}catch(e){alert(e.message);}
+      };
+
+      const configureWebhooks=async()=>{
+        const baseUrl=document.getElementById("rc-baseurl")?.value?.trim();
+        if(!baseUrl){alert("Enter your public server URL");return;}
+        try{await api.server.request("POST","/receptionist/configure-webhooks",{baseUrl});alert("Webhooks configured successfully!");}catch(e){alert(e.message);}
+      };
+
+      if(!isServer)return React.createElement("div",{style:{color:"#475569",padding:"40px"}},"AI Receptionist requires server mode.");
+
+      const formatDuration=(d)=>d?`${Math.floor(d/60)}:${String(d%60).padStart(2,"0")}`:"--";
+      const statusColors={completed:"#4ade80",in_progress:"#fbbf24",missed:"#f87171"};
+      const voices=["Polly.Joanna","Polly.Matthew","Polly.Salli","Polly.Joey","Polly.Kendra","Polly.Kimberly","Polly.Ivy","Polly.Justin"];
+
+      // Call detail / transcript view
+      if(selectedCall){
+        let messages=[];
+        try{messages=JSON.parse(selectedCall.transcript||"[]");}catch(e){}
+        return React.createElement("div",null,
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"20px"}},
+            React.createElement("button",{onClick:()=>setSelectedCall(null),style:btnSecondary},"← Back"),
+            React.createElement("div",null,
+              React.createElement("h2",{style:{margin:0,fontSize:"18px",color:"#e2e8f0"}},selectedCall.customer_name||selectedCall.caller_phone||"Unknown Call"),
+              React.createElement("div",{style:{fontSize:"12px",color:"#475569",marginTop:"2px"}},
+                new Date(selectedCall.created_at).toLocaleString()," · ",formatDuration(selectedCall.duration)," · ",selectedCall.status
+              )
+            )
+          ),
+          selectedCall.intake_id&&React.createElement("div",{style:{background:"#0a2e1a",border:"1px solid #166534",borderRadius:"8px",padding:"12px 16px",marginBottom:"16px",fontSize:"13px",color:"#4ade80"}},
+            "Intake created: ",React.createElement("strong",null,selectedCall.intake_id)
+          ),
+          React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"12px",padding:"20px",maxHeight:"60vh",overflow:"auto"}},
+            messages.filter(m=>!m.content.startsWith("[SYSTEM")).length===0?
+              React.createElement("div",{style:{color:"#475569"}},"No transcript available"):
+              messages.filter(m=>!m.content.startsWith("[SYSTEM")).map((m,i)=>
+                React.createElement("div",{key:i,style:{marginBottom:"14px",display:"flex",flexDirection:"column",alignItems:m.role==="assistant"?"flex-start":"flex-end"}},
+                  React.createElement("div",{style:{fontSize:"10px",color:"#475569",marginBottom:"3px"}},m.role==="assistant"?"AI Receptionist":"Caller"),
+                  React.createElement("div",{style:{background:m.role==="assistant"?"#111820":"rgba(249,115,22,0.1)",padding:"10px 14px",borderRadius:"12px",maxWidth:"75%",fontSize:"13px",lineHeight:"1.5",color:"#e2e8f0"}},m.content.replace(/<INTAKE_COMPLETE>[\s\S]*/,"").trim())
+                )
+              )
+          )
+        );
+      }
+
+      return React.createElement("div",null,
+        React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}},
+          React.createElement("div",null,
+            React.createElement("h1",{style:{margin:0,fontSize:"22px",color:"#e2e8f0"}},"📞 AI Receptionist"),
+            React.createElement("p",{style:{margin:"4px 0 0",fontSize:"12px",color:"#475569"}},"Automated phone intake powered by Claude AI + Twilio")
+          ),
+          React.createElement("div",{style:{display:"flex",gap:"8px",alignItems:"center"}},
+            settings&&React.createElement("div",{style:{display:"flex",alignItems:"center",gap:"6px",padding:"6px 12px",borderRadius:"8px",background:settings.enabled?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)",border:`1px solid ${settings.enabled?"#166534":"#5a2020"}`}},
+              React.createElement("div",{style:{width:8,height:8,borderRadius:"50%",background:settings.enabled?"#4ade80":"#f87171"}}),
+              React.createElement("span",{style:{fontSize:"12px",fontWeight:600,color:settings.enabled?"#4ade80":"#f87171"}},settings.enabled?"Active":"Inactive")
+            ),
+            React.createElement("button",{onClick:()=>{loadCalls();if(isAdmin)loadSettings();},style:btnSecondary},"Refresh")
+          )
+        ),
+        React.createElement("div",{style:{display:"flex",gap:"6px",marginBottom:"16px"}},
+          React.createElement("button",{onClick:()=>setTab("calls"),style:{padding:"6px 14px",borderRadius:"6px",border:"none",fontSize:"12px",fontWeight:600,cursor:"pointer",background:tab==="calls"?"#f97316":"#111820",color:tab==="calls"?"#fff":"#94a3b8"}},"Call Log"),
+          isAdmin&&React.createElement("button",{onClick:()=>setTab("settings"),style:{padding:"6px 14px",borderRadius:"6px",border:"none",fontSize:"12px",fontWeight:600,cursor:"pointer",background:tab==="settings"?"#f97316":"#111820",color:tab==="settings"?"#fff":"#94a3b8"}},"Settings")
+        ),
+
+        // Call Log Tab
+        tab==="calls"&&React.createElement("div",null,
+          loading?React.createElement("div",{style:{color:"#475569"}},"Loading..."):
+          calls.length===0?React.createElement("div",{style:{textAlign:"center",padding:"60px 20px",color:"#475569"}},
+            React.createElement("div",{style:{fontSize:"48px",marginBottom:"12px"}},"📞"),
+            React.createElement("div",{style:{fontSize:"16px",marginBottom:"6px"}},"No calls yet"),
+            React.createElement("div",{style:{fontSize:"13px"}},"When the AI receptionist takes calls, they'll appear here.")
+          ):
+          calls.map(c=>React.createElement("div",{key:c.id,onClick:()=>setSelectedCall(c),style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"16px",marginBottom:"8px",cursor:"pointer",transition:"border-color 0.15s",":hover":{borderColor:"#f97316"}}},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}},
+              React.createElement("span",{style:{fontSize:"15px",fontWeight:700,color:"#e2e8f0"}},c.customer_name||c.caller_phone||"Unknown"),
+              React.createElement("span",{style:{fontSize:"11px",padding:"3px 8px",borderRadius:"4px",background:(statusColors[c.status]||"#475569")+"22",color:statusColors[c.status]||"#475569",fontWeight:600}},c.status||"unknown")
+            ),
+            React.createElement("div",{style:{fontSize:"12px",color:"#64748b",marginBottom:"4px"}},"📱 "+(c.caller_phone||"N/A")),
+            React.createElement("div",{style:{display:"flex",gap:"16px",fontSize:"11px",color:"#475569"}},
+              React.createElement("span",null,"🕐 "+formatDuration(c.duration)),
+              React.createElement("span",null,c.created_at?new Date(c.created_at).toLocaleString():""),
+              c.intake_id&&React.createElement("span",{style:{color:"#4ade80"}},"→ "+c.intake_id)
+            )
+          ))
+        ),
+
+        // Settings Tab
+        tab==="settings"&&isAdmin&&settings&&React.createElement("div",null,
+          React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"20px",marginBottom:"12px"}},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+              React.createElement("div",null,
+                React.createElement("h3",{style:{margin:0,fontSize:"15px",color:"#e2e8f0"}},"Receptionist Status"),
+                React.createElement("p",{style:{margin:"4px 0 0",fontSize:"12px",color:"#475569"}},settings.enabled?"The AI receptionist is answering calls":"The AI receptionist is currently disabled")
+              ),
+              React.createElement("button",{onClick:toggleEnabled,style:settings.enabled?btnSecondary:btnPrimary},settings.enabled?"Disable":"Enable")
+            )
+          ),
+          React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}},
+            React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"20px"}},
+              React.createElement("h3",{style:{margin:"0 0 16px",fontSize:"15px",color:"#e2e8f0"}},"Twilio Configuration"),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Account SID"),
+              React.createElement("input",{id:"rc-sid",defaultValue:settings.twilioAccountSid||"",placeholder:"ACxxxxxxxxx",style:{...inputStyle,marginBottom:"12px"}}),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Auth Token"),
+              React.createElement("input",{id:"rc-token",type:"password",defaultValue:settings.twilioAuthToken||"",placeholder:"Auth token",style:{...inputStyle,marginBottom:"12px"}}),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Phone Number"),
+              React.createElement("input",{id:"rc-phone",defaultValue:settings.twilioPhoneNumber||"",placeholder:"+1234567890",style:{...inputStyle,marginBottom:"0"}})
+            ),
+            React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"20px"}},
+              React.createElement("h3",{style:{margin:"0 0 16px",fontSize:"15px",color:"#e2e8f0"}},"AI Configuration"),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Claude API Key"),
+              React.createElement("input",{id:"rc-apikey",type:"password",defaultValue:settings.anthropicApiKey||"",placeholder:"sk-ant-...",style:{...inputStyle,marginBottom:"12px"}}),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Voice"),
+              React.createElement("select",{id:"rc-voice",defaultValue:settings.voiceName||"Polly.Joanna",style:{...inputStyle,marginBottom:"12px"}},
+                voices.map(v=>React.createElement("option",{key:v,value:v},v.replace("Polly.","")))
+              ),
+              React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Max Turns"),
+              React.createElement("input",{id:"rc-turns",type:"number",defaultValue:settings.maxTurns||12,min:4,max:30,style:{...inputStyle,marginBottom:"0"}})
+            )
+          ),
+          React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"20px",marginTop:"12px"}},
+            React.createElement("label",{style:{fontSize:"12px",color:"#475569",display:"block",marginBottom:"4px"}},"Custom Greeting (optional)"),
+            React.createElement("textarea",{id:"rc-greeting",rows:3,defaultValue:settings.greeting||"",placeholder:"Leave blank for default greeting",style:{...inputStyle,marginBottom:"12px"}}),
+            React.createElement("div",{style:{display:"flex",gap:"8px"}},
+              React.createElement("button",{onClick:saveSettings,style:btnPrimary},"Save Settings")
+            )
+          ),
+          React.createElement("div",{style:{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"10px",padding:"20px",marginTop:"12px"}},
+            React.createElement("h3",{style:{margin:"0 0 8px",fontSize:"15px",color:"#e2e8f0"}},"Webhook Setup"),
+            React.createElement("p",{style:{margin:"0 0 12px",fontSize:"12px",color:"#475569",lineHeight:"1.5"}},"Enter your public server URL to automatically configure Twilio webhooks. Use ngrok for local testing."),
+            React.createElement("input",{id:"rc-baseurl",placeholder:"https://your-server.com",style:{...inputStyle,marginBottom:"10px"}}),
+            React.createElement("button",{onClick:configureWebhooks,style:btnSecondary},"Configure Webhooks")
+          )
+        )
+      );
+    }
+
     // ─── NOTIFICATION BELL ───────────────────────────────────────────
     function NotificationBell({isServer}){
       const[notifs,setNotifs]=useState([]);const[unread,setUnread]=useState(0);const[open,setOpen]=useState(false);
@@ -2321,7 +2487,7 @@
       );
     }
 
-    const NAV_BASE=[{id:"calendar",label:"Calendar",icon:"📅"},{id:"dashboard",label:"Dashboard",icon:"◎"},{id:"jobs",label:"Work Orders",icon:"⚡"},{id:"estimates",label:"Estimates",icon:"📋"},{id:"teams",label:"Teams",icon:"👥"},{id:"customers",label:"Customers",icon:"⊞"},{id:"intake",label:"Intake",icon:"📥"},{id:"compliance",label:"Compliance",icon:"📜"},{id:"knowledge",label:"Knowledge",icon:"◈"},{id:"vehicles",label:"Vehicles",icon:"◆"},{id:"settings",label:"Settings",icon:"⚙"}];
+    const NAV_BASE=[{id:"calendar",label:"Calendar",icon:"📅"},{id:"dashboard",label:"Dashboard",icon:"◎"},{id:"jobs",label:"Work Orders",icon:"⚡"},{id:"estimates",label:"Estimates",icon:"📋"},{id:"teams",label:"Teams",icon:"👥"},{id:"customers",label:"Customers",icon:"⊞"},{id:"intake",label:"Intake",icon:"📥"},{id:"receptionist",label:"Receptionist",icon:"📞"},{id:"compliance",label:"Compliance",icon:"📜"},{id:"knowledge",label:"Knowledge",icon:"◈"},{id:"vehicles",label:"Vehicles",icon:"◆"},{id:"settings",label:"Settings",icon:"⚙"}];
 
     // ─── CONNECTION / LOGIN SCREEN ──────────────────────────────────
     function LoginScreen({onConnect,onLocal}){
@@ -2514,6 +2680,7 @@
             {view==="teams"&&<TeamsView jobs={jobs} isServer={isServer}/>}
             {view==="customers"&&<CustomersView customers={customers} jobs={jobs} onNewCustomer={()=>setShowNewCust(true)} onDeleteCustomer={deleteCustomer} onSelectJob={setSelectedJob}/>}
             {view==="intake"&&<IntakeView isServer={isServer}/>}
+            {view==="receptionist"&&<ReceptionistView isServer={isServer} isAdmin={isAdmin}/>}
             {view==="compliance"&&<ComplianceView jobs={jobs} customers={customers} isServer={isServer}/>}
             {view==="knowledge"&&<KnowledgeBase knowledgeBase={kb} onAddEntry={addKBEntry} onDeleteEntry={deleteKBEntry}/>}
             {view==="vehicles"&&<VehicleDatabase vehicles={vehicles} jobs={jobs} customers={customers} onAddVehicle={addVehicle} onDeleteVehicle={deleteVehicle} isServer={isServer}/>}

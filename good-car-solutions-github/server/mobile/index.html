@@ -236,7 +236,10 @@ let state={
   custFromEst:false,
   estDraft:null,
   refreshing:false,
-  error:''
+  error:'',
+  receptionistCalls:[],
+  receptionistSettings:null,
+  receptionistTab:'calls'
 };
 
 // Track what view is currently rendered in the DOM
@@ -314,18 +317,20 @@ async function loadData(){
 
 async function loadExtraData(){
   try{
-    const[tRes,aRes,iRes,kRes,uRes]=await Promise.all([
+    const[tRes,aRes,iRes,kRes,uRes,rcRes]=await Promise.all([
       API.req('GET','/teams').catch(()=>({data:[]})),
       API.req('GET','/agreements').catch(()=>({data:[]})),
       API.req('GET','/intake-submissions').catch(()=>({data:[]})),
       API.req('GET','/kb').catch(()=>({data:{procedures:[],dtcMaps:[],fileLibrary:[]}})),
-      API.req('GET','/users').catch(()=>({data:[]}))
+      API.req('GET','/users').catch(()=>({data:[]})),
+      API.req('GET','/receptionist/calls').catch(()=>({data:[]}))
     ]);
     state.teams=tRes.data||[];
     state.users=uRes.data||[];
     state.agreements=aRes.data||[];
     state.intakeSubs=iRes.data||[];
     state.kb=kRes.data||{procedures:[],dtcMaps:[],fileLibrary:[]};
+    state.receptionistCalls=rcRes.data||[];
     if(!FORM_VIEWS.has(getTargetView()))render();
   }catch(e){}
 }
@@ -391,11 +396,12 @@ function renderApp(){
   else if(state.tab==='calendar')content=renderCalendar();
   else if(state.tab==='teams')content=renderTeams();
   else if(state.tab==='intake')content=renderIntake();
+  else if(state.tab==='receptionist')content=renderReceptionist();
   else if(state.tab==='compliance')content=renderCompliance();
   else if(state.tab==='knowledge')content=renderKnowledge();
   else if(state.tab==='settings')content=renderSettings();
 
-  const moreTabs=['calendar','customers','vehicles','teams','intake','compliance','knowledge','settings'];
+  const moreTabs=['calendar','customers','vehicles','teams','intake','receptionist','compliance','knowledge','settings'];
   const isMoreActive=moreTabs.includes(state.tab);
 
   return `
@@ -428,6 +434,7 @@ function renderApp(){
         {id:'vehicles',icon:'◆',label:'Vehicles'},
         {id:'teams',icon:'👥',label:'Teams'},
         {id:'intake',icon:'📥',label:'Intake'},
+        {id:'receptionist',icon:'📞',label:'Receptionist'},
         {id:'compliance',icon:'📜',label:'Compliance'},
         {id:'knowledge',icon:'◈',label:'Knowledge Base'},
         {id:'settings',icon:'⚙',label:'Settings'}
@@ -1606,6 +1613,128 @@ function renderKnowledge(){
 }
 
 // ─── SETTINGS (MOBILE) ─────────────────────────────────────────
+// ─── RECEPTIONIST ───────────────────────────────────────────────
+function renderReceptionist(){
+  const isAdmin=API.user?.role==='admin';
+  const calls=state.receptionistCalls||[];
+  const tab=state.receptionistTab||'calls';
+
+  let content='';
+
+  if(tab==='calls'){
+    if(calls.length===0){
+      content=`<div style="text-align:center;padding:40px 20px;color:var(--muted)">
+        <div style="font-size:40px;margin-bottom:12px">📞</div>
+        <div style="font-size:14px;margin-bottom:6px">No calls yet</div>
+        <div style="font-size:12px">When the AI receptionist takes calls, they'll appear here.</div>
+      </div>`;
+    } else {
+      content=calls.map(c=>{
+        const date=c.created_at?new Date(c.created_at+'Z').toLocaleString():'-';
+        const dur=c.duration?`${Math.floor(c.duration/60)}:${String(c.duration%60).padStart(2,'0')}`:'--';
+        const statusColor=c.status==='completed'?'var(--green)':c.status==='in_progress'?'var(--yellow)':'var(--red)';
+        return `<div class="card" data-callid="${c.id}" style="cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">
+            <div style="font-size:15px;font-weight:700;color:var(--text)">${c.customer_name||c.caller_phone||'Unknown'}</div>
+            <span class="badge" style="background:${statusColor}22;color:${statusColor};font-size:10px">${c.status||'unknown'}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">📱 ${c.caller_phone||'N/A'}</div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--dim)">
+            <span>🕐 ${dur}</span>
+            <span>${date}</span>
+            ${c.intake_id?`<span style="color:var(--green)">→ ${c.intake_id}</span>`:''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } else if(tab==='settings'&&isAdmin){
+    const s=state.receptionistSettings||{};
+    content=`
+    <div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text)">Receptionist Status</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${s.enabled?'var(--green)':'var(--red)'}"></div>
+        <span style="font-size:14px;font-weight:600;color:${s.enabled?'var(--green)':'var(--red)'}">${s.enabled?'Active':'Inactive'}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" id="rcToggle">${s.enabled?'Disable':'Enable'} Receptionist</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text)">Twilio Configuration</div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Account SID</label>
+      <input id="rcTwilioSid" value="${s.twilioAccountSid||''}" placeholder="ACxxxxxxxxx" style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Auth Token</label>
+      <input id="rcTwilioToken" type="password" value="${s.twilioAuthToken||''}" placeholder="Auth token" style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Phone Number</label>
+      <input id="rcTwilioPhone" value="${s.twilioPhoneNumber||''}" placeholder="+1234567890" style="margin-bottom:10px">
+    </div>
+    <div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text)">AI Configuration</div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Claude API Key</label>
+      <input id="rcAnthropicKey" type="password" value="${s.anthropicApiKey||''}" placeholder="sk-ant-..." style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Voice</label>
+      <select id="rcVoice" style="margin-bottom:10px">
+        ${['Polly.Joanna','Polly.Matthew','Polly.Salli','Polly.Joey','Polly.Kendra','Polly.Kimberly','Polly.Ivy','Polly.Justin'].map(v=>`<option value="${v}" ${s.voiceName===v?'selected':''}>${v.replace('Polly.','')}</option>`).join('')}
+      </select>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Custom Greeting (optional)</label>
+      <textarea id="rcGreeting" rows="3" placeholder="Leave blank for default greeting" style="margin-bottom:10px">${s.greeting||''}</textarea>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Max Conversation Turns</label>
+      <input id="rcMaxTurns" type="number" value="${s.maxTurns||12}" min="4" max="30" style="margin-bottom:10px">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn" id="rcSaveSettings" style="flex:1">Save Settings</button>
+    </div>
+    <div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text)">Webhook Setup</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Enter your public server URL to automatically configure Twilio webhooks. Your server must be reachable from the internet (use ngrok for local testing).
+      </div>
+      <input id="rcBaseUrl" placeholder="https://your-server.com" style="margin-bottom:10px">
+      <button class="btn-s btn-sm" id="rcConfigWebhooks">Configure Webhooks</button>
+    </div>`;
+  } else if(tab==='transcript'){
+    const call=state.selectedCall;
+    if(!call){
+      content=`<div style="text-align:center;padding:40px;color:var(--muted)">Select a call to view transcript</div>`;
+    } else {
+      let messages=[];
+      try{messages=JSON.parse(call.transcript||'[]');}catch(e){}
+      content=`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button class="btn-s btn-sm" id="rcBackToCalls">← Back</button>
+        <div>
+          <div style="font-size:15px;font-weight:700">${call.customer_name||call.caller_phone||'Unknown'}</div>
+          <div style="font-size:11px;color:var(--muted)">${call.created_at?new Date(call.created_at+'Z').toLocaleString():''}</div>
+        </div>
+      </div>
+      <div class="card" style="max-height:60vh;overflow-y:auto">
+        ${messages.length===0?'<div style="color:var(--muted);font-size:13px">No transcript available</div>':
+        messages.filter(m=>!m.content.startsWith('[SYSTEM')).map(m=>`
+          <div style="margin-bottom:12px;display:flex;flex-direction:column;align-items:${m.role==='assistant'?'flex-start':'flex-end'}">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">${m.role==='assistant'?'AI Receptionist':'Caller'}</div>
+            <div style="background:${m.role==='assistant'?'var(--border)':'var(--accent)22'};padding:10px 14px;border-radius:12px;max-width:85%;font-size:13px;line-height:1.4;color:var(--text)">${m.content.replace(/<INTAKE_COMPLETE>[\s\S]*/,'').trim()}</div>
+          </div>
+        `).join('')}
+      </div>
+      ${call.intake_id?`<div style="margin-top:12px;padding:12px;background:var(--green)11;border:1px solid var(--green)33;border-radius:8px;font-size:13px;color:var(--green)">
+        Intake created: <strong>${call.intake_id}</strong>
+      </div>`:''}`;
+    }
+  }
+
+  return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <h2 style="font-size:18px;font-weight:700;margin:0">📞 AI Receptionist</h2>
+    <button class="btn-s btn-sm" id="rcRefresh">↻</button>
+  </div>
+  ${tab!=='transcript'?`<div style="display:flex;gap:6px;margin-bottom:14px">
+    <button class="btn-sm ${tab==='calls'?'btn':'btn-s'}" data-rctab="calls">Call Log</button>
+    ${isAdmin?`<button class="btn-sm ${tab==='settings'?'btn':'btn-s'}" data-rctab="settings">Settings</button>`:''}
+  </div>`:''}
+  <div id="rcContent">${content}</div>`;
+}
+
 function renderSettings(){
   return `
   <h2 style="font-size:18px;font-weight:700;margin:0 0 12px">Settings</h2>
@@ -2681,6 +2810,84 @@ function bindEvents(){
   if(changePassBtn)changePassBtn.onclick=async()=>{
     const p=prompt('Enter new password:');if(!p)return;
     try{await API.req('POST','/auth/change-password',{newPassword:p});alert('Password changed');}catch(e){alert(e.message);}
+  };
+
+  // ─── RECEPTIONIST EVENTS ────────────────────────────────────────
+  document.querySelectorAll('[data-rctab]').forEach(el=>{
+    el.onclick=async()=>{
+      const t=el.dataset.rctab;
+      if(t==='settings'&&!state.receptionistSettings){
+        try{const r=await API.req('GET','/receptionist/settings');state.receptionistSettings=r.data;}catch(e){}
+      }
+      setState({receptionistTab:t,selectedCall:null});
+    };
+  });
+
+  const rcRefresh=document.getElementById('rcRefresh');
+  if(rcRefresh)rcRefresh.onclick=async()=>{
+    try{
+      const r=await API.req('GET','/receptionist/calls');
+      state.receptionistCalls=r.data||[];
+      if(state.receptionistTab==='settings'){
+        const s=await API.req('GET','/receptionist/settings');
+        state.receptionistSettings=s.data;
+      }
+      render();
+    }catch(e){alert(e.message);}
+  };
+
+  document.querySelectorAll('[data-callid]').forEach(el=>{
+    el.onclick=async()=>{
+      const id=el.dataset.callid;
+      try{
+        const r=await API.req('GET','/receptionist/calls/'+id);
+        setState({selectedCall:r.data,receptionistTab:'transcript'});
+      }catch(e){alert(e.message);}
+    };
+  });
+
+  const rcBackToCalls=document.getElementById('rcBackToCalls');
+  if(rcBackToCalls)rcBackToCalls.onclick=()=>setState({receptionistTab:'calls',selectedCall:null});
+
+  const rcToggle=document.getElementById('rcToggle');
+  if(rcToggle)rcToggle.onclick=async()=>{
+    const s=state.receptionistSettings||{};
+    try{
+      await API.req('PUT','/receptionist/settings',{enabled:!s.enabled});
+      s.enabled=!s.enabled;
+      state.receptionistSettings=s;
+      render();
+    }catch(e){alert(e.message);}
+  };
+
+  const rcSaveSettings=document.getElementById('rcSaveSettings');
+  if(rcSaveSettings)rcSaveSettings.onclick=async()=>{
+    const data={
+      twilioAccountSid:document.getElementById('rcTwilioSid')?.value||'',
+      twilioAuthToken:document.getElementById('rcTwilioToken')?.value||'',
+      twilioPhoneNumber:document.getElementById('rcTwilioPhone')?.value||'',
+      anthropicApiKey:document.getElementById('rcAnthropicKey')?.value||'',
+      voiceName:document.getElementById('rcVoice')?.value||'Polly.Joanna',
+      greeting:document.getElementById('rcGreeting')?.value||'',
+      maxTurns:parseInt(document.getElementById('rcMaxTurns')?.value||'12',10)
+    };
+    try{
+      await API.req('PUT','/receptionist/settings',data);
+      const r=await API.req('GET','/receptionist/settings');
+      state.receptionistSettings=r.data;
+      alert('Settings saved!');
+      render();
+    }catch(e){alert(e.message);}
+  };
+
+  const rcConfigWebhooks=document.getElementById('rcConfigWebhooks');
+  if(rcConfigWebhooks)rcConfigWebhooks.onclick=async()=>{
+    const baseUrl=document.getElementById('rcBaseUrl')?.value?.trim();
+    if(!baseUrl){alert('Enter your public server URL');return;}
+    try{
+      await API.req('POST','/receptionist/configure-webhooks',{baseUrl});
+      alert('Webhooks configured! Your Twilio number is now connected.');
+    }catch(e){alert(e.message);}
   };
 }
 
