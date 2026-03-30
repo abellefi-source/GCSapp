@@ -164,7 +164,7 @@ app.get("/api/jobs", authRequired, (req, res) => {
     const timeline = query("SELECT * FROM job_timeline WHERE job_id = ? ORDER BY timestamp ASC", [j.id]);
     const payments = query("SELECT * FROM payments WHERE job_id = ? ORDER BY date ASC", [j.id]);
     // Get latest invoice view tracking for this job
-    const invoiceRows = query("SELECT viewed_at, view_count FROM invoices WHERE job_id = ? ORDER BY created_at DESC LIMIT 1", [j.id]);
+    const invoiceRows = query("SELECT invoice_no, viewed_at, view_count FROM invoices WHERE job_id = ? ORDER BY created_at DESC LIMIT 1", [j.id]);
     const invoiceView = invoiceRows.length ? invoiceRows[0] : null;
     return {
       id: j.id, vehicle: j.vehicle, vin: j.vin, customer: j.customer,
@@ -175,7 +175,8 @@ app.get("/api/jobs", authRequired, (req, res) => {
       teamId: j.team_id || "",
       lineItems: JSON.parse(j.line_items || "[]"),
       invoiceDraft: j.invoice_draft ? JSON.parse(j.invoice_draft) : null,
-      invoiceNo: j.invoice_no || "",
+      invoiceNo: j.invoice_no || invoiceView?.invoice_no || "",
+      hasInvoice: !!invoiceView,
       invoiceViewedAt: invoiceView?.viewed_at || "",
       invoiceViewCount: invoiceView?.view_count || 0,
       createdAt: j.created_at, updatedAt: j.updated_at,

@@ -1245,14 +1245,14 @@
 
                 {/* Invoice viewed status */}
                 <td style={{padding:"14px 16px",fontSize:"12px",fontFamily:"'DM Mono',monospace"}}>
-                  {!j.invoiceNo?(<span style={{color:"#334155"}}>—</span>):
+                  {!(j.hasInvoice||j.invoiceNo)?(<span style={{color:"#334155"}}>—</span>):
                    j.invoiceViewCount>0?(
                     <span title={`Viewed ${j.invoiceViewCount}x · Last: ${new Date(j.invoiceViewedAt).toLocaleString()}`} style={{color:"#4ade80",fontWeight:600,display:"inline-flex",alignItems:"center",gap:"4px"}}>
-                      <span style={{display:"inline-block",width:"6px",height:"6px",borderRadius:"50%",background:"#4ade80"}}></span>
+                      <span style={{display:"inline-block",width:"8px",height:"8px",borderRadius:"50%",background:"#4ade80"}}></span>
                       Viewed{j.invoiceViewCount>1?` (${j.invoiceViewCount})`:""}</span>
-                  ):(<span style={{color:"#f59e0b",display:"inline-flex",alignItems:"center",gap:"4px"}}>
-                      <span style={{display:"inline-block",width:"6px",height:"6px",borderRadius:"50%",background:"#f59e0b"}}></span>
-                      Sent</span>)}
+                  ):(<span style={{color:"#f59e0b",fontWeight:600,display:"inline-flex",alignItems:"center",gap:"4px"}}>
+                      <span style={{display:"inline-block",width:"8px",height:"8px",borderRadius:"50%",background:"#f59e0b"}}></span>
+                      Not Viewed</span>)}
                 </td>
               </tr>
             );})}
