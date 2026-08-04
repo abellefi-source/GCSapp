@@ -179,6 +179,8 @@ app.get("/api/jobs", authRequired, (req, res) => {
       hasInvoice: !!invoiceView,
       invoiceViewedAt: invoiceView?.viewed_at || "",
       invoiceViewCount: invoiceView?.view_count || 0,
+      sessionsRequired: j.sessions_required || 1,
+      sessionsCompleted: j.sessions_completed || 0,
       createdAt: j.created_at, updatedAt: j.updated_at,
       notes: timeline.map(t => ({
         type: t.type, text: t.text, timestamp: t.timestamp, createdBy: t.created_by,
@@ -222,7 +224,7 @@ app.put("/api/jobs/:id", authRequired, (req, res) => {
     type: "type", ecu: "ecu", tools: "tools", priority: "priority", status: "status",
     amount: "amount", paid: "paid", date: "date", serviceAddress: "service_address",
     scheduledStart: "scheduled_start", scheduledEnd: "scheduled_end", teamId: "team_id",
-    invoiceNo: "invoice_no" };
+    invoiceNo: "invoice_no", sessionsRequired: "sessions_required", sessionsCompleted: "sessions_completed" };
 
   for (const [key, col] of Object.entries(fields)) {
     if (u[key] !== undefined) {
@@ -269,6 +271,7 @@ app.put("/api/jobs/:id", authRequired, (req, res) => {
   const payments = query("SELECT * FROM payments WHERE job_id = ? ORDER BY date ASC", [jobId]);
   res.json({
     ...j, paid: !!j.paid,
+    sessionsRequired: j.sessions_required || 1, sessionsCompleted: j.sessions_completed || 0,
     notes: timeline.map(t => ({ type: t.type, text: t.text, timestamp: t.timestamp, createdBy: t.created_by, ...(t.file_json ? { file: JSON.parse(t.file_json) } : {}) })),
     payments: payments.map(p => ({ amount: p.amount, note: p.note, date: p.date, createdBy: p.created_by }))
   });
@@ -1275,6 +1278,12 @@ async function migrateSchema() {
   }
   if (!colNames.includes("invoice_no")) {
     try { run("ALTER TABLE jobs ADD COLUMN invoice_no TEXT DEFAULT ''"); console.log("  [MIGRATE] Added invoice_no to jobs"); } catch(e) {}
+  }
+  if (!colNames.includes("sessions_required")) {
+    try { run("ALTER TABLE jobs ADD COLUMN sessions_required INTEGER DEFAULT 1"); console.log("  [MIGRATE] Added sessions_required to jobs"); } catch(e) {}
+  }
+  if (!colNames.includes("sessions_completed")) {
+    try { run("ALTER TABLE jobs ADD COLUMN sessions_completed INTEGER DEFAULT 0"); console.log("  [MIGRATE] Added sessions_completed to jobs"); } catch(e) {}
   }
 
   // Invoices table migrations
