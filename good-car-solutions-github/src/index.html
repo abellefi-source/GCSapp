@@ -1298,12 +1298,35 @@
     }
 
     // ─── CUSTOMERS VIEW ──────────────────────────────────────────────
+    function EditCustomerModal({customer,onClose,onSave}){
+      const[form,setForm]=useState({name:customer.name||"",contact:customer.contact||"",phone:customer.phone||"",email:customer.email||"",address:customer.address||"",type:customer.type||"Independent Shop",notes:customer.notes||""});
+      const save=async()=>{await onSave(customer.id,form);onClose();};
+      return(<Modal onClose={onClose} title="Edit Customer" width={520}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
+          <FormField label="Name"><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} style={inputStyle}/></FormField>
+          <FormField label="Contact Person"><input value={form.contact} onChange={e=>setForm(f=>({...f,contact:e.target.value}))} placeholder="Contact name" style={inputStyle}/></FormField>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
+          <FormField label="Phone"><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="(555) 123-4567" style={inputStyle}/></FormField>
+          <FormField label="Email"><input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="email@example.com" style={inputStyle}/></FormField>
+        </div>
+        <FormField label="Address"><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Street address, City, State" style={inputStyle}/></FormField>
+        <FormField label="Type">
+          <select value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))} style={inputStyle}>
+            {CUSTOMER_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Notes"><textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} rows={3} placeholder="Notes about this customer..." style={{...inputStyle,resize:"vertical"}}/></FormField>
+        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end",marginTop:"6px"}}>
+          <button onClick={onClose} style={btnSecondary}>Cancel</button>
+          <button onClick={save} style={btnPrimary}>Save Changes</button>
+        </div>
+      </Modal>);
+    }
+
     function CustomersView({customers,jobs,onNewCustomer,onUpdateCustomer,onDeleteCustomer,onSelectJob}){
       const[sel,setSel]=useState(null);
-      const[editId,setEditId]=useState(null);
-      const[editForm,setEditForm]=useState({});
-      const startEditCust=(c,e)=>{e.stopPropagation();setEditId(c.id);setEditForm({name:c.name||"",contact:c.contact||"",phone:c.phone||"",email:c.email||"",address:c.address||"",type:c.type||"Independent Shop",notes:c.notes||""});};
-      const saveEditCust=async()=>{if(editId&&onUpdateCustomer){await onUpdateCustomer(editId,editForm);setEditId(null);}};
+      const[editCust,setEditCust]=useState(null);
       const getCustomerJobs=(name)=>jobs.filter(j=>j.customer===name);
       return(
         <div>
@@ -1320,22 +1343,8 @@
                 <div style={{display:"flex",gap:"16px"}}><span style={{fontSize:"11px",color:"#64748b",fontFamily:"'DM Mono',monospace"}}>{cJobs.length} jobs</span>{cActive.length>0&&<span style={{fontSize:"11px",color:"#f97316",fontFamily:"'DM Mono',monospace"}}>{cActive.length} active</span>}</div>
 
                 {sel?.id===c.id&&(<div style={{borderTop:"1px solid #1e2a35",paddingTop:"12px",marginTop:"10px"}}>
-                  {editId===c.id?(<div style={{marginBottom:"12px"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"8px"}}>
-                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Name</label><input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
-                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Contact</label><input value={editForm.contact} onChange={e=>setEditForm(f=>({...f,contact:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"8px"}}>
-                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Phone</label><input value={editForm.phone} onChange={e=>setEditForm(f=>({...f,phone:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
-                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Email</label><input value={editForm.email} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
-                    </div>
-                    <div style={{marginBottom:"8px"}}><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Address</label><input value={editForm.address} onChange={e=>setEditForm(f=>({...f,address:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
-                    <div style={{marginBottom:"8px"}}><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Notes</label><textarea value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} rows={2} style={{...inputStyle,padding:"8px 10px",fontSize:"13px",resize:"vertical"}}/></div>
-                    <div style={{display:"flex",gap:"8px"}}><button onClick={e=>{e.stopPropagation();saveEditCust();}} style={{...btnPrimary,padding:"6px 14px",fontSize:"11px"}}>Save</button><button onClick={e=>{e.stopPropagation();setEditId(null);}} style={{...btnSecondary,padding:"6px 14px",fontSize:"11px"}}>Cancel</button></div>
-                  </div>):(<>
                   <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"10px"}}>{c.phone&&<span style={{fontSize:"11px",color:"#60a5fa",fontFamily:"'DM Mono',monospace"}}>{c.phone}</span>}{c.email&&<span style={{fontSize:"11px",color:"#60a5fa",fontFamily:"'DM Mono',monospace"}}>{c.email}</span>}</div>
                   {c.notes&&<div style={{fontSize:"12px",color:"#94a3b8",lineHeight:1.5,marginBottom:"12px"}}>{c.notes}</div>}
-                  </>)}
 
                   {/* Linked Jobs */}
                   {cJobs.length>0&&(<div style={{marginBottom:"12px"}}>
@@ -1358,11 +1367,12 @@
                   </div>)}
                   {cJobs.length===0&&<div style={{fontSize:"12px",color:"#334155",fontFamily:"'DM Mono',monospace",marginBottom:"12px"}}>No work orders yet</div>}
 
-                  <div style={{display:"flex",gap:"8px"}}><button onClick={e=>startEditCust(c,e)} style={{...btnSecondary,padding:"6px 14px",fontSize:"11px"}}>✎ Edit</button><button onClick={e=>{e.stopPropagation();if(confirm(`Delete ${c.name}?`))onDeleteCustomer(c.id);}} style={{...btnDanger,padding:"6px 14px",fontSize:"11px"}}>Delete Customer</button></div>
+                  <div style={{display:"flex",gap:"8px"}}><button onClick={e=>{e.stopPropagation();setEditCust(c);}} style={{...btnSecondary,padding:"6px 14px",fontSize:"11px"}}>✎ Edit</button><button onClick={e=>{e.stopPropagation();if(confirm(`Delete ${c.name}?`))onDeleteCustomer(c.id);}} style={{...btnDanger,padding:"6px 14px",fontSize:"11px"}}>Delete Customer</button></div>
                 </div>)}
               </div>);
             })}
           </div>
+          {editCust&&<EditCustomerModal customer={editCust} onClose={()=>setEditCust(null)} onSave={onUpdateCustomer}/>}
         </div>
       );
     }
