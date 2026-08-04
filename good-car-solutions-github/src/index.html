@@ -68,7 +68,9 @@
       requestAnimationFrame(animate);
     }
     const PRIORITY_COLORS={High:"#ef4444",Medium:"#f59e0b",Low:"#6b7280"};
-    const JOB_TYPES=["ECU Programming","Module Cloning","ECU Adaptation","GPEC2 Unlock","ADAS Calibration","Electrical Diagnostics","Key Programming","BCM Programming","TCM Programming","Other"];
+    const DEFAULT_JOB_TYPES=["ECU Programming","Module Cloning","ECU Adaptation","GPEC2 Unlock","ADAS Calibration","Electrical Diagnostics","Key Programming","BCM Programming","TCM Programming","Other"];
+    let _jobTypes=[...DEFAULT_JOB_TYPES];
+    const JOB_TYPES_CTX=React.createContext({types:_jobTypes,addType:()=>{}});
     const CUSTOMER_TYPES=["Independent Shop","Body Shop","Dealer","Fleet Operator","Individual","Other"];
     const FILE_ICONS={pdf:"📄",bin:"💾",hex:"💾",ori:"📦",mod:"🔧",jpg:"🖼️",jpeg:"🖼️",png:"🖼️",txt:"📝",csv:"📊",doc:"📄",docx:"📄",xls:"📊",xlsx:"📊"};
 
@@ -85,11 +87,27 @@
     function FormField({label,children}){return(<div style={{marginBottom:"14px"}}><label style={{display:"block",fontSize:"11px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:"6px",fontFamily:"'DM Mono',monospace"}}>{label}</label>{children}</div>);}
     function Modal({onClose,title,width,children}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)",padding:"20px",animation:"fadeIn 0.15s ease"}} onClick={onClose}><div style={{background:"#0f1419",border:"1px solid #1e2a35",borderRadius:"14px",width:"100%",maxWidth:width||560,maxHeight:"85vh",overflow:"auto",padding:"28px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"24px"}}><h2 style={{margin:0,fontSize:"18px",color:"#e2e8f0"}}>{title}</h2><button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:"20px",cursor:"pointer"}}>✕</button></div>{children}</div></div>);}
 
+    function ServiceTypeSelect({value,onChange,types,onAddType}){
+      const[showCustom,setShowCustom]=useState(false);const[customVal,setCustomVal]=useState("");
+      const handleChange=e=>{if(e.target.value==="__add_custom__"){setShowCustom(true);setCustomVal("");}else{onChange(e.target.value);}};
+      const saveCustom=()=>{const v=customVal.trim();if(v){if(onAddType)onAddType(v);onChange(v);}setShowCustom(false);setCustomVal("");};
+      if(showCustom)return(<div style={{display:"flex",gap:"6px"}}><input value={customVal} onChange={e=>setCustomVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveCustom();if(e.key==="Escape"){setShowCustom(false);setCustomVal("");}}} placeholder="Enter service type..." style={{...inputStyle,flex:1}} autoFocus/><button onClick={saveCustom} style={{...btnPrimary,padding:"10px 14px",fontSize:"12px"}}>Add</button><button onClick={()=>{setShowCustom(false);setCustomVal("");}} style={{...btnSecondary,padding:"10px 10px",fontSize:"12px"}}>✕</button></div>);
+      return(<select value={value} onChange={handleChange} style={inputStyle}>{(types||DEFAULT_JOB_TYPES).map(t=><option key={t} value={t}>{t}</option>)}<option value="__add_custom__">+ Add Custom Type...</option></select>);
+    }
+
+    function AddressLink({address}){
+      if(!address)return null;
+      const url=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+      const open=(e)=>{e.preventDefault();e.stopPropagation();if(window.gcs?.openExternal){window.gcs.openExternal(url);}else{window.open(url,"_blank");}};
+      return(<a href={url} onClick={open} style={{color:"#f97316",textDecoration:"none",fontSize:"inherit",cursor:"pointer"}}>{address} <span style={{fontSize:"10px"}}>↗</span></a>);
+    }
+
     function formatBytes(b){if(!b)return"0 B";const k=1024;const s=["B","KB","MB","GB"];const i=Math.floor(Math.log(b)/Math.log(k));return parseFloat((b/Math.pow(k,i)).toFixed(1))+" "+s[i];}
     function formatNoteTime(iso){if(!iso)return"";const d=new Date(iso);const now=new Date();const dm=Math.floor((now-d)/60000);const dh=Math.floor((now-d)/3600000);const dd=Math.floor((now-d)/86400000);let rel="";if(dm<1)rel="just now";else if(dm<60)rel=dm+"m ago";else if(dh<24)rel=dh+"h ago";else if(dd<7)rel=dd+"d ago";const ds=d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});const ts=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});return rel?`${ds} ${ts} (${rel})`:`${ds} ${ts}`;}
 
     // ─── NEW JOB MODAL ───────────────────────────────────────────────
     function NewJobModal({onClose,onSave,customers,onCreateCustomer}){
+      const{types:jobTypes,addType:addServiceType}=useContext(JOB_TYPES_CTX);
       const[form,setForm]=useState({vehicle:"",vin:"",customerId:"",type:"ECU Programming",ecu:"",priority:"Medium",tools:"",notes:"",amount:"",date:new Date().toISOString().split("T")[0],status:"Scheduled",serviceAddress:""});
       const[showInlineCust,setShowInlineCust]=useState(false);
       const set=(k,v)=>setForm(f=>({...f,[k]:v}));
@@ -108,7 +126,7 @@
               <button onClick={()=>setShowInlineCust(!showInlineCust)} style={{background:"none",border:"none",color:"#f97316",fontSize:"11px",cursor:"pointer",marginTop:"6px",fontFamily:"'DM Mono',monospace"}}>+ Add New Customer</button>
               {showInlineCust&&<InlineNewCustomer onSave={handleInlineSave} onCancel={()=>setShowInlineCust(false)}/>}
             </FormField>
-            <FormField label="Job Type"><select value={form.type} onChange={e=>set("type",e.target.value)} style={inputStyle}>{JOB_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></FormField>
+            <FormField label="Job Type"><ServiceTypeSelect value={form.type} onChange={v=>set("type",v)} types={jobTypes} onAddType={addServiceType}/></FormField>
           </div>
           <FormField label="Service Address">
             <input value={form.serviceAddress||(selCust?.address||"")} onChange={e=>set("serviceAddress",e.target.value)} placeholder="Shop address for this job" style={inputStyle}/>
@@ -667,6 +685,7 @@
 
     function JobDetailPanel({job,customers,onClose,onUpdate,onDelete,onCreateCustomer,isServer}){
       if(!job)return null;
+      const{types:jobTypes,addType:addServiceType}=useContext(JOB_TYPES_CTX);
       const[editing,setEditing]=useState(false);
       const[form,setForm]=useState({});
       const[newNote,setNewNote]=useState("");
@@ -745,7 +764,7 @@
                   <button onClick={()=>setShowInlineCustomer(!showInlineCustomer)} style={{background:"none",border:"none",color:"#f97316",fontSize:"11px",cursor:"pointer",marginTop:"6px",fontFamily:"'DM Mono',monospace"}}>+ Add New Customer</button>
                   {showInlineCustomer&&<InlineNewCustomer onSave={handleInlineCustomerSave} onCancel={()=>setShowInlineCustomer(false)}/>}
                 </FormField>
-                <FormField label="Job Type"><select value={form.type} onChange={e=>set("type",e.target.value)} style={inputStyle}>{JOB_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></FormField>
+                <FormField label="Job Type"><ServiceTypeSelect value={form.type} onChange={v=>set("type",v)} types={jobTypes} onAddType={addServiceType}/></FormField>
               </div>
               <FormField label="Service Address"><input value={form.serviceAddress} onChange={e=>set("serviceAddress",e.target.value)} placeholder="Address for this job" style={inputStyle}/></FormField>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px"}}>
@@ -772,10 +791,10 @@
               <div style={{display:"flex",gap:"6px"}}><button onClick={startEdit} style={{background:"#1e2a35",border:"none",borderRadius:"6px",padding:"6px 12px",color:"#60a5fa",fontSize:"12px",cursor:"pointer",fontWeight:600,fontFamily:"'DM Mono',monospace"}}>✎ Edit</button><button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:"20px",cursor:"pointer"}}>✕</button></div>
             </div>
             <div style={{display:"flex",gap:"8px",marginBottom:"24px",flexWrap:"wrap"}}><StatusBadge status={job.status} balance={jobBal(job)}/><PriorityDot priority={job.priority}/></div>
-            {[{label:"VIN",value:job.vin},{label:"Customer",value:job.customer},{label:"Service Address",value:job.serviceAddress},{label:"Job Type",value:job.type},{label:"ECU / Module",value:job.ecu},{label:"Tools",value:job.tools},{label:"Date",value:job.date}].map(item=>(
+            {[{label:"VIN",value:job.vin},{label:"Customer",value:job.customer},{label:"Service Address",value:job.serviceAddress,isAddress:true},{label:"Job Type",value:job.type},{label:"ECU / Module",value:job.ecu},{label:"Tools",value:job.tools},{label:"Date",value:job.date}].map(item=>(
               <div key={item.label} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid #111820"}}>
                 <span style={{fontSize:"12px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.6px",fontFamily:"'DM Mono',monospace"}}>{item.label}</span>
-                <span style={{fontSize:"13px",color:"#cbd5e1",fontFamily:"'DM Mono',monospace",textAlign:"right",maxWidth:"60%"}}>{item.value||"—"}</span>
+                <span style={{fontSize:"13px",color:"#cbd5e1",fontFamily:"'DM Mono',monospace",textAlign:"right",maxWidth:"60%"}}>{item.isAddress&&item.value?<AddressLink address={item.value}/>:(item.value||"—")}</span>
               </div>
             ))}
 
@@ -1155,6 +1174,7 @@
 
     // ─── JOBS VIEW ───────────────────────────────────────────────────
     function JobsView({jobs,customers,onSelectJob,onNewJob,onUpdateJob}){
+      const{types:jobTypes}=useContext(JOB_TYPES_CTX);
       const[filter,setFilter]=useState("All");const[search,setSearch]=useState("");
       const[editCell,setEditCell]=useState(null); // {jobId, field}
       const[editVal,setEditVal]=useState("");
@@ -1227,7 +1247,7 @@
 
                 {/* Type - double-click for dropdown */}
                 <td style={{padding:"14px 16px"}} onDoubleClick={e=>startEdit(e,j.id,"type",j.type)}>
-                  {isEditing(j.id,"type")?(<select ref={editRef} value={editVal} onChange={e=>setEditVal(e.target.value)} onBlur={saveEdit} onKeyDown={handleKey} style={cellEdit()}>{JOB_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select>):(<span style={{fontSize:"12px",color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>{j.type}</span>)}
+                  {isEditing(j.id,"type")?(<select ref={editRef} value={editVal} onChange={e=>setEditVal(e.target.value)} onBlur={saveEdit} onKeyDown={handleKey} style={cellEdit()}>{jobTypes.map(t=><option key={t} value={t}>{t}</option>)}</select>):(<span style={{fontSize:"12px",color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>{j.type}</span>)}
                 </td>
 
                 {/* Status - double-click for dropdown */}
@@ -1262,8 +1282,12 @@
     }
 
     // ─── CUSTOMERS VIEW ──────────────────────────────────────────────
-    function CustomersView({customers,jobs,onNewCustomer,onDeleteCustomer,onSelectJob}){
+    function CustomersView({customers,jobs,onNewCustomer,onUpdateCustomer,onDeleteCustomer,onSelectJob}){
       const[sel,setSel]=useState(null);
+      const[editId,setEditId]=useState(null);
+      const[editForm,setEditForm]=useState({});
+      const startEditCust=(c,e)=>{e.stopPropagation();setEditId(c.id);setEditForm({name:c.name||"",contact:c.contact||"",phone:c.phone||"",email:c.email||"",address:c.address||"",type:c.type||"Independent Shop",notes:c.notes||""});};
+      const saveEditCust=async()=>{if(editId&&onUpdateCustomer){await onUpdateCustomer(editId,editForm);setEditId(null);}};
       const getCustomerJobs=(name)=>jobs.filter(j=>j.customer===name);
       return(
         <div>
@@ -1276,12 +1300,26 @@
               const cActive=cJobs.filter(j=>j.status!=="Completed"&&j.status!=="Cancelled");
               return(<div key={c.id} onClick={()=>setSel(sel?.id===c.id?null:c)} style={{background:"#0f1419",border:"1px solid",borderColor:sel?.id===c.id?"#f97316":"#1e2a35",borderRadius:"10px",padding:"20px",cursor:"pointer",transition:"border-color 0.2s"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}><div><div style={{fontSize:"15px",color:"#e2e8f0",fontWeight:600}}>{c.name}</div><div style={{fontSize:"12px",color:"#475569",marginTop:"2px"}}>{c.contact} · {c.type}</div></div><span style={{fontSize:"16px",color:"#4ade80",fontFamily:"'DM Mono',monospace",fontWeight:700}}>${cRevenue.toLocaleString()}</span></div>
-                {c.address&&<div style={{fontSize:"11px",color:"#64748b",fontFamily:"'DM Mono',monospace",marginBottom:"6px"}}>📍 {c.address}</div>}
+                {c.address&&<div style={{fontSize:"11px",color:"#64748b",fontFamily:"'DM Mono',monospace",marginBottom:"6px"}}>📍 <AddressLink address={c.address}/></div>}
                 <div style={{display:"flex",gap:"16px"}}><span style={{fontSize:"11px",color:"#64748b",fontFamily:"'DM Mono',monospace"}}>{cJobs.length} jobs</span>{cActive.length>0&&<span style={{fontSize:"11px",color:"#f97316",fontFamily:"'DM Mono',monospace"}}>{cActive.length} active</span>}</div>
 
                 {sel?.id===c.id&&(<div style={{borderTop:"1px solid #1e2a35",paddingTop:"12px",marginTop:"10px"}}>
+                  {editId===c.id?(<div style={{marginBottom:"12px"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"8px"}}>
+                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Name</label><input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
+                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Contact</label><input value={editForm.contact} onChange={e=>setEditForm(f=>({...f,contact:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"8px"}}>
+                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Phone</label><input value={editForm.phone} onChange={e=>setEditForm(f=>({...f,phone:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
+                      <div><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Email</label><input value={editForm.email} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
+                    </div>
+                    <div style={{marginBottom:"8px"}}><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Address</label><input value={editForm.address} onChange={e=>setEditForm(f=>({...f,address:e.target.value}))} style={{...inputStyle,padding:"8px 10px",fontSize:"13px"}}/></div>
+                    <div style={{marginBottom:"8px"}}><label style={{fontSize:"10px",color:"#64748b",textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:"4px"}}>Notes</label><textarea value={editForm.notes} onChange={e=>setEditForm(f=>({...f,notes:e.target.value}))} rows={2} style={{...inputStyle,padding:"8px 10px",fontSize:"13px",resize:"vertical"}}/></div>
+                    <div style={{display:"flex",gap:"8px"}}><button onClick={e=>{e.stopPropagation();saveEditCust();}} style={{...btnPrimary,padding:"6px 14px",fontSize:"11px"}}>Save</button><button onClick={e=>{e.stopPropagation();setEditId(null);}} style={{...btnSecondary,padding:"6px 14px",fontSize:"11px"}}>Cancel</button></div>
+                  </div>):(<>
                   <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"10px"}}>{c.phone&&<span style={{fontSize:"11px",color:"#60a5fa",fontFamily:"'DM Mono',monospace"}}>{c.phone}</span>}{c.email&&<span style={{fontSize:"11px",color:"#60a5fa",fontFamily:"'DM Mono',monospace"}}>{c.email}</span>}</div>
                   {c.notes&&<div style={{fontSize:"12px",color:"#94a3b8",lineHeight:1.5,marginBottom:"12px"}}>{c.notes}</div>}
+                  </>)}
 
                   {/* Linked Jobs */}
                   {cJobs.length>0&&(<div style={{marginBottom:"12px"}}>
@@ -1304,7 +1342,7 @@
                   </div>)}
                   {cJobs.length===0&&<div style={{fontSize:"12px",color:"#334155",fontFamily:"'DM Mono',monospace",marginBottom:"12px"}}>No work orders yet</div>}
 
-                  <button onClick={e=>{e.stopPropagation();if(confirm(`Delete ${c.name}?`))onDeleteCustomer(c.id);}} style={{...btnDanger,padding:"6px 14px",fontSize:"11px"}}>Delete Customer</button>
+                  <div style={{display:"flex",gap:"8px"}}><button onClick={e=>startEditCust(c,e)} style={{...btnSecondary,padding:"6px 14px",fontSize:"11px"}}>✎ Edit</button><button onClick={e=>{e.stopPropagation();if(confirm(`Delete ${c.name}?`))onDeleteCustomer(c.id);}} style={{...btnDanger,padding:"6px 14px",fontSize:"11px"}}>Delete Customer</button></div>
                 </div>)}
               </div>);
             })}
@@ -1616,6 +1654,7 @@
 
     // ─── ESTIMATES ──────────────────────────────────────────────────
     function EstimatesView({onNavigateJob,isServer}){
+      const{types:jobTypes,addType:addServiceType}=useContext(JOB_TYPES_CTX);
       const[estimates,setEstimates]=useState([]);
       const[loading,setLoading]=useState(true);
       const[showNew,setShowNew]=useState(false);
@@ -1681,7 +1720,7 @@
                 <FormField label="VIN"><input value={form.vin} onChange={e=>setForm(f=>({...f,vin:e.target.value}))} placeholder="Optional" style={{...inputStyle,fontFamily:"'DM Mono',monospace",fontSize:"12px"}}/></FormField>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 120px",gap:"10px",marginTop:"10px"}}>
-                <FormField label="Service Type"><select value={form.service_type} onChange={e=>setForm(f=>({...f,service_type:e.target.value}))} style={inputStyle}>{JOB_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></FormField>
+                <FormField label="Service Type"><ServiceTypeSelect value={form.service_type} onChange={v=>setForm(f=>({...f,service_type:v}))} types={jobTypes} onAddType={addServiceType}/></FormField>
                 <FormField label="Modules / ECU"><input value={form.modules} onChange={e=>setForm(f=>({...f,modules:e.target.value}))} placeholder="PCM, BCM, TCM..." style={inputStyle}/></FormField>
                 <FormField label="Quoted Price $"><input value={form.price} onChange={e=>setForm(f=>({...f,price:e.target.value}))} placeholder="0" type="number" style={{...inputStyle,fontFamily:"'DM Mono',monospace"}}/></FormField>
               </div>
@@ -2004,7 +2043,7 @@
                   )
                 ),
                 React.createElement("div",{style:{fontSize:"12px",color:"#64748b",marginTop:"4px"}},j.customer||""),
-                j.serviceAddress&&React.createElement("div",{style:{fontSize:"11px",color:"#475569",marginTop:"2px"}},"📍 "+j.serviceAddress)
+                j.serviceAddress&&React.createElement("div",{style:{fontSize:"11px",color:"#475569",marginTop:"2px"}},"📍 ",React.createElement(AddressLink,{address:j.serviceAddress}))
               );
             })
           )
@@ -2446,6 +2485,7 @@
       const[showNewJob,setShowNewJob]=useState(false);const[showNewCust,setShowNewCust]=useState(false);
       const[loading,setLoading]=useState(true);
       const[syncError,setSyncError]=useState("");
+      const[jobTypes,setJobTypes]=useState([...DEFAULT_JOB_TYPES]);
 
       const isServer=mode==="server";
       const isAdmin=!isServer||serverUser?.role==="admin";
@@ -2458,7 +2498,7 @@
         if(!isServer)return{
           loadAll:async()=>{const[j,c,k,v]=await Promise.all([api.jobs.getAll(),api.customers.getAll(),api.kb.getAll(),api.vehicles.getAll()]);return{jobs:j||[],customers:c||[],kb:k||{procedures:[],dtcMaps:[],fileLibrary:[]},vehicles:v||[]};},
           createJob:d=>api.jobs.create(d),updateJob:(id,u)=>api.jobs.update(id,u),deleteJob:id=>api.jobs.delete(id),
-          createCustomer:d=>api.customers.create(d),deleteCustomer:id=>api.customers.delete(id),
+          createCustomer:d=>api.customers.create(d),updateCustomer:(id,u)=>api.customers.update(id,u),deleteCustomer:id=>api.customers.delete(id),
           addKBEntry:(cat,e)=>api.kb.addEntry(cat,e),deleteKBEntry:(cat,id)=>api.kb.deleteEntry(cat,id),
           addVehicle:d=>api.vehicles.create(d),deleteVehicle:id=>api.vehicles.delete(id),
         };
@@ -2466,7 +2506,7 @@
         return{
           loadAll:async()=>{const[j,c,k,v]=await Promise.all([unwrap(()=>api.server.jobs.getAll()),unwrap(()=>api.server.customers.getAll()),unwrap(()=>api.server.kb.getAll()),unwrap(()=>api.server.vehicles.getAll())]);return{jobs:j||[],customers:c||[],kb:k||{procedures:[],dtcMaps:[],fileLibrary:[]},vehicles:v||[]};},
           createJob:d=>unwrap(()=>api.server.jobs.create(d)),updateJob:(id,u)=>unwrap(()=>api.server.jobs.update(id,u)),deleteJob:id=>unwrap(()=>api.server.jobs.delete(id)),
-          createCustomer:d=>unwrap(()=>api.server.customers.create(d)),deleteCustomer:id=>unwrap(()=>api.server.customers.delete(id)),
+          createCustomer:d=>unwrap(()=>api.server.customers.create(d)),updateCustomer:(id,u)=>unwrap(()=>api.server.customers.update(id,u)),deleteCustomer:id=>unwrap(()=>api.server.customers.delete(id)),
           addKBEntry:(cat,e)=>unwrap(()=>api.server.kb.addEntry(cat,e)),deleteKBEntry:(cat,id)=>unwrap(()=>api.server.kb.deleteEntry(cat,id)),
           addVehicle:d=>unwrap(()=>api.server.vehicles.create(d)),deleteVehicle:id=>unwrap(()=>api.server.vehicles.delete(id)),
         };
@@ -2475,14 +2515,20 @@
       const loadData=async()=>{try{setSyncError("");const d=await dataApi.loadAll();setJobs(d.jobs);setCustomers(d.customers);setKb(d.kb);setVehicles(d.vehicles);}catch(e){console.error(e);setSyncError(e.message);}setLoading(false);};
       useEffect(()=>{if(mode)loadData();},[mode]);
 
+      useEffect(()=>{if(!mode)return;if(isServer){api.server.request("GET","/api/service-types").then(r=>{if(r.types)setJobTypes(r.types);}).catch(()=>{});}else{api.settings.get().then(s=>{if(s?.customServiceTypes){try{const custom=JSON.parse(s.customServiceTypes);const merged=[...DEFAULT_JOB_TYPES];for(const t of custom){if(!merged.includes(t))merged.splice(merged.length-1,0,t);}setJobTypes(merged);}catch(e){}}});}
+      },[mode,isServer]);
+      const addServiceType=async(type)=>{if(!type||jobTypes.includes(type))return;const updated=[...jobTypes];updated.splice(updated.length-1,0,type);setJobTypes(updated);if(isServer){api.server.request("POST","/api/service-types",{type}).catch(()=>{});}else{const s=await api.settings.get();const custom=s?.customServiceTypes?JSON.parse(s.customServiceTypes):[];if(!custom.includes(type)){custom.push(type);api.settings.update({customServiceTypes:JSON.stringify(custom)});}}
+      };
+
       // Auto-refresh in server mode (15s)
       useEffect(()=>{if(!isServer)return;const iv=setInterval(async()=>{try{const d=await dataApi.loadAll();setJobs(d.jobs);setCustomers(d.customers);setKb(d.kb);setVehicles(d.vehicles);setSyncError("");}catch(e){setSyncError("Sync lost: "+e.message);}},15000);return()=>clearInterval(iv);},[isServer,dataApi]);
 
       // CRUD
-      const createJob=async d=>{const n=await dataApi.createJob(d);if(isServer){loadData();}else{setJobs(p=>[n,...p]);}};
+      const createJob=async d=>{const n=await dataApi.createJob(d);if(isServer){await loadData();}else{setJobs(p=>[n,...p]);}return n;};
       const updateJob=async(id,u)=>{const up=await dataApi.updateJob(id,u);if(isServer){const d=await dataApi.loadAll();setJobs(d.jobs);setCustomers(d.customers);setKb(d.kb);setVehicles(d.vehicles);const fresh=d.jobs.find(j=>j.id===id);if(fresh&&selectedJob?.id===id)setSelectedJob(fresh);}else{setJobs(p=>p.map(j=>j.id===id?up:j));if(selectedJob?.id===id)setSelectedJob(up);}};
       const deleteJob=async id=>{if(!isAdmin){alert("Only admins can delete work orders");return;}await dataApi.deleteJob(id);if(isServer){loadData();}else{setJobs(p=>p.filter(j=>j.id!==id));}};
       const createCustomer=async d=>{const n=await dataApi.createCustomer(d);if(isServer){loadData();}else{setCustomers(p=>[...p,n]);}return n;};
+      const updateCustomer=async(id,u)=>{const up=await dataApi.updateCustomer(id,u);if(isServer){loadData();}else{setCustomers(p=>p.map(c=>c.id===id?{...c,...u}:c));}};
       const deleteCustomer=async id=>{if(!isAdmin){alert("Only admins can delete customers");return;}await dataApi.deleteCustomer(id);if(isServer){loadData();}else{setCustomers(p=>p.filter(c=>c.id!==id));}};
       const addKBEntry=async(cat,e)=>{const n=await dataApi.addKBEntry(cat,e);if(isServer){loadData();}else{setKb(p=>({...p,[cat]:[...(p[cat]||[]),n]}));}};
       const deleteKBEntry=async(cat,id)=>{if(!isAdmin)return;await dataApi.deleteKBEntry(cat,id);if(isServer){loadData();}else{setKb(p=>({...p,[cat]:(p[cat]||[]).filter(e=>e.id!==id)}));}};
@@ -2497,6 +2543,7 @@
       const versionTag=isServer?`v2.6.4 · ${serverUser?.displayName} (${serverUser?.role})`:"v2.6.4 · Local";
 
       return(
+        <JOB_TYPES_CTX.Provider value={{types:jobTypes,addType:addServiceType}}>
         <div style={{display:"flex",height:"100%"}}>
           <div style={{width:210,background:"#0a0e13",borderRight:"1px solid #1e2a35",padding:"16px 12px",flexShrink:0,display:"flex",flexDirection:"column"}}>
             <div style={{padding:"4px 10px",marginBottom:"28px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:"16px",fontWeight:700,color:"#f97316",letterSpacing:"-0.5px"}}>GCS</div><div style={{fontSize:"10px",color:"#475569",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'DM Mono',monospace",marginTop:"2px"}}>Good Car Solutions</div></div>{isServer&&<NotificationBell isServer={isServer}/>}</div>
@@ -2513,7 +2560,7 @@
             {view==="jobs"&&<JobsView jobs={jobs} customers={customers} onSelectJob={setSelectedJob} onNewJob={()=>setShowNewJob(true)} onUpdateJob={updateJob}/>}
             {view==="estimates"&&<EstimatesView onNavigateJob={(id)=>{const j=jobs.find(x=>x.id===id);if(j)setSelectedJob(j);else{loadData().then(()=>setView("jobs"));}}} isServer={isServer}/>}
             {view==="teams"&&<TeamsView jobs={jobs} isServer={isServer}/>}
-            {view==="customers"&&<CustomersView customers={customers} jobs={jobs} onNewCustomer={()=>setShowNewCust(true)} onDeleteCustomer={deleteCustomer} onSelectJob={setSelectedJob}/>}
+            {view==="customers"&&<CustomersView customers={customers} jobs={jobs} onNewCustomer={()=>setShowNewCust(true)} onUpdateCustomer={updateCustomer} onDeleteCustomer={deleteCustomer} onSelectJob={setSelectedJob}/>}
             {view==="intake"&&<IntakeView isServer={isServer}/>}
             {view==="compliance"&&<ComplianceView jobs={jobs} customers={customers} isServer={isServer}/>}
             {view==="knowledge"&&<KnowledgeBase knowledgeBase={kb} onAddEntry={addKBEntry} onDeleteEntry={deleteKBEntry}/>}
@@ -2522,9 +2569,10 @@
             {view==="settings"&&<SettingsView isServer={isServer}/>}
           </div>
           {selectedJob&&<JobDetailPanel job={selectedJob} customers={customers} onClose={()=>setSelectedJob(null)} onUpdate={updateJob} onDelete={deleteJob} onCreateCustomer={createCustomer} isServer={isServer}/>}
-          {showNewJob&&<NewJobModal customers={customers} onClose={()=>setShowNewJob(false)} onSave={createJob} onCreateCustomer={createCustomer}/>}
+          {showNewJob&&<NewJobModal customers={customers} onClose={()=>setShowNewJob(false)} onSave={async(d)=>{const n=await createJob(d);if(n){setShowNewJob(false);setView("jobs");setSelectedJob(n);}}} onCreateCustomer={createCustomer}/>}
           {showNewCust&&<NewCustomerModal onClose={()=>setShowNewCust(false)} onSave={createCustomer}/>}
         </div>
+        </JOB_TYPES_CTX.Provider>
       );
     }
     ReactDOM.createRoot(document.getElementById("root")).render(<App/>);

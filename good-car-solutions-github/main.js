@@ -271,6 +271,7 @@ ipcMain.handle("data:backupDatabase", async () => {
 });
 ipcMain.handle("data:getStorePath", () => store.path);
 ipcMain.handle("data:openStoreFolder", () => { shell.showItemInFolder(store.path); return true; });
+ipcMain.handle("app:openExternal", (e, url) => { if (typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"))) { shell.openExternal(url); return true; } return false; });
 
 // ─── EXIF Orientation Reader (phone photos store rotation in metadata) ───
 function getExifOrientation(filePath) {

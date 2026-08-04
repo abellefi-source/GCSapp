@@ -407,6 +407,34 @@ app.put("/api/settings", authRequired, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
+// ─── SERVICE TYPES ──────────────────────────────────────────────
+const DEFAULT_SERVICE_TYPES=["ECU Programming","Module Cloning","ECU Adaptation","GPEC2 Unlock","ADAS Calibration","Electrical Diagnostics","Key Programming","BCM Programming","TCM Programming","Other"];
+
+function getServiceTypes(){
+  const raw=getSetting("customServiceTypes");
+  const custom=raw?JSON.parse(raw):[];
+  const merged=[...DEFAULT_SERVICE_TYPES];
+  for(const t of custom){if(!merged.includes(t))merged.splice(merged.length-1,0,t);}
+  return merged;
+}
+
+app.get("/api/service-types",authRequired,(req,res)=>{
+  res.json({types:getServiceTypes()});
+});
+
+app.post("/api/service-types",authRequired,(req,res)=>{
+  const{type}=req.body;
+  if(!type||typeof type!=="string"||!type.trim())return res.status(400).json({error:"Type is required"});
+  const trimmed=type.trim();
+  const raw=getSetting("customServiceTypes");
+  const custom=raw?JSON.parse(raw):[];
+  if(!custom.includes(trimmed)&&!DEFAULT_SERVICE_TYPES.includes(trimmed)){
+    custom.push(trimmed);
+    setSetting("customServiceTypes",JSON.stringify(custom));
+  }
+  res.json({types:getServiceTypes()});
+});
+
 // ─── DATABASE BACKUP ─────────────────────────────────────────────
 app.post("/api/backup/database", authRequired, adminOnly, (req, res) => {
   try {
@@ -1561,15 +1589,7 @@ textarea{resize:vertical;min-height:80px}
       <div class="field"><label>Service Type</label>
         <select id="f_type">
           <option value="">Select a service...</option>
-          <option>ECU Programming</option>
-          <option>ECU Tuning</option>
-          <option>Key Programming</option>
-          <option>Module Coding</option>
-          <option>DTC Delete</option>
-          <option>Immobilizer Bypass</option>
-          <option>BCM Programming</option>
-          <option>Electrical Diagnostics</option>
-          <option>Other</option>
+          ${getServiceTypes().map(t=>`<option>${t}</option>`).join("")}
         </select>
       </div>
       <div class="field"><label>Describe what you need</label><textarea id="f_desc" placeholder="Tell us about the issue or service you need..." rows="3"></textarea></div>
