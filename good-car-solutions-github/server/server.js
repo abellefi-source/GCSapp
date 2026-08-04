@@ -10,7 +10,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { getDb, query, run, getSetting, setSetting, saveDb, DATA_HOME } = require("./db");
+const { getDb, query, run, getSetting, setSetting, saveDb, DB_PATH, DATA_HOME } = require("./db");
 
 const app = express();
 const PORT = process.env.GCS_PORT || 3377;
@@ -179,6 +179,8 @@ app.get("/api/jobs", authRequired, (req, res) => {
       hasInvoice: !!invoiceView,
       invoiceViewedAt: invoiceView?.viewed_at || "",
       invoiceViewCount: invoiceView?.view_count || 0,
+      sessionsRequired: j.sessions_required || 1,
+      sessionsCompleted: j.sessions_completed || 0,
       createdAt: j.created_at, updatedAt: j.updated_at,
       notes: timeline.map(t => ({
         type: t.type, text: t.text, timestamp: t.timestamp, createdBy: t.created_by,
@@ -222,7 +224,7 @@ app.put("/api/jobs/:id", authRequired, (req, res) => {
     type: "type", ecu: "ecu", tools: "tools", priority: "priority", status: "status",
     amount: "amount", paid: "paid", date: "date", serviceAddress: "service_address",
     scheduledStart: "scheduled_start", scheduledEnd: "scheduled_end", teamId: "team_id",
-    invoiceNo: "invoice_no" };
+    invoiceNo: "invoice_no", sessionsRequired: "sessions_required", sessionsCompleted: "sessions_completed" };
 
   for (const [key, col] of Object.entries(fields)) {
     if (u[key] !== undefined) {
@@ -269,6 +271,7 @@ app.put("/api/jobs/:id", authRequired, (req, res) => {
   const payments = query("SELECT * FROM payments WHERE job_id = ? ORDER BY date ASC", [jobId]);
   res.json({
     ...j, paid: !!j.paid,
+    sessionsRequired: j.sessions_required || 1, sessionsCompleted: j.sessions_completed || 0,
     notes: timeline.map(t => ({ type: t.type, text: t.text, timestamp: t.timestamp, createdBy: t.created_by, ...(t.file_json ? { file: JSON.parse(t.file_json) } : {}) })),
     payments: payments.map(p => ({ amount: p.amount, note: p.note, date: p.date, createdBy: p.created_by }))
   });
@@ -405,6 +408,77 @@ app.get("/api/settings", authRequired, (req, res) => {
 app.put("/api/settings", authRequired, adminOnly, (req, res) => {
   for (const [k, v] of Object.entries(req.body)) setSetting(k, v);
   res.json({ success: true });
+});
+
+// ─── SERVICE TYPES ──────────────────────────────────────────────
+const DEFAULT_SERVICE_TYPES=["ECU Programming","Module Cloning","ECU Adaptation","GPEC2 Unlock","ADAS Calibration","Electrical Diagnostics","Key Programming","BCM Programming","TCM Programming","Other"];
+
+function getServiceTypes(){
+  const raw=getSetting("customServiceTypes");
+  const custom=raw?JSON.parse(raw):[];
+  const merged=[...DEFAULT_SERVICE_TYPES];
+  for(const t of custom){if(!merged.includes(t))merged.splice(merged.length-1,0,t);}
+  return merged;
+}
+
+app.get("/api/service-types",authRequired,(req,res)=>{
+  res.json({types:getServiceTypes()});
+});
+
+app.post("/api/service-types",authRequired,(req,res)=>{
+  const{type}=req.body;
+  if(!type||typeof type!=="string"||!type.trim())return res.status(400).json({error:"Type is required"});
+  const trimmed=type.trim();
+  const raw=getSetting("customServiceTypes");
+  const custom=raw?JSON.parse(raw):[];
+  if(!custom.includes(trimmed)&&!DEFAULT_SERVICE_TYPES.includes(trimmed)){
+    custom.push(trimmed);
+    setSetting("customServiceTypes",JSON.stringify(custom));
+  }
+  res.json({types:getServiceTypes()});
+});
+
+// ─── DATABASE BACKUP ─────────────────────────────────────────────
+app.post("/api/backup/database", authRequired, adminOnly, (req, res) => {
+  try {
+    saveDb();
+    const backupDir = path.join(DATA_HOME, "backups");
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupName = `gcs-database-backup-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupName);
+    fs.copyFileSync(DB_PATH, backupPath);
+    res.json({ success: true, path: backupPath, filename: backupName });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/backup/list", authRequired, adminOnly, (req, res) => {
+  try {
+    const backupDir = path.join(DATA_HOME, "backups");
+    if (!fs.existsSync(backupDir)) return res.json({ backups: [] });
+    const files = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith("gcs-database-backup-") && f.endsWith(".db"))
+      .map(f => {
+        const stat = fs.statSync(path.join(backupDir, f));
+        return { filename: f, size: stat.size, created: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.created.localeCompare(a.created));
+    res.json({ backups: files });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/backup/download/:filename", authRequired, adminOnly, (req, res) => {
+  const filename = path.basename(req.params.filename);
+  if (!filename.startsWith("gcs-database-backup-") || !filename.endsWith(".db")) {
+    return res.status(400).json({ error: "Invalid backup filename" });
+  }
+  const backupPath = path.join(DATA_HOME, "backups", filename);
+  if (!fs.existsSync(backupPath)) return res.status(404).json({ error: "Backup not found" });
+  res.download(backupPath, filename);
 });
 
 // ─── INVOICE NUMBER ──────────────────────────────────────────────
@@ -1205,6 +1279,12 @@ async function migrateSchema() {
   if (!colNames.includes("invoice_no")) {
     try { run("ALTER TABLE jobs ADD COLUMN invoice_no TEXT DEFAULT ''"); console.log("  [MIGRATE] Added invoice_no to jobs"); } catch(e) {}
   }
+  if (!colNames.includes("sessions_required")) {
+    try { run("ALTER TABLE jobs ADD COLUMN sessions_required INTEGER DEFAULT 1"); console.log("  [MIGRATE] Added sessions_required to jobs"); } catch(e) {}
+  }
+  if (!colNames.includes("sessions_completed")) {
+    try { run("ALTER TABLE jobs ADD COLUMN sessions_completed INTEGER DEFAULT 0"); console.log("  [MIGRATE] Added sessions_completed to jobs"); } catch(e) {}
+  }
 
   // Invoices table migrations
   const invCols = query("PRAGMA table_info(invoices)").map(c => c.name);
@@ -1518,15 +1598,7 @@ textarea{resize:vertical;min-height:80px}
       <div class="field"><label>Service Type</label>
         <select id="f_type">
           <option value="">Select a service...</option>
-          <option>ECU Programming</option>
-          <option>ECU Tuning</option>
-          <option>Key Programming</option>
-          <option>Module Coding</option>
-          <option>DTC Delete</option>
-          <option>Immobilizer Bypass</option>
-          <option>BCM Programming</option>
-          <option>Electrical Diagnostics</option>
-          <option>Other</option>
+          ${getServiceTypes().map(t=>`<option>${t}</option>`).join("")}
         </select>
       </div>
       <div class="field"><label>Describe what you need</label><textarea id="f_desc" placeholder="Tell us about the issue or service you need..." rows="3"></textarea></div>

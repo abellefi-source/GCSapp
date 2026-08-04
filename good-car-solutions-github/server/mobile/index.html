@@ -236,7 +236,8 @@ let state={
   custFromEst:false,
   estDraft:null,
   refreshing:false,
-  error:''
+  error:'',
+  serviceTypes:['ECU Programming','Module Cloning','ECU Adaptation','GPEC2 Unlock','ADAS Calibration','Electrical Diagnostics','Key Programming','BCM Programming','TCM Programming','Other']
 };
 
 // Track what view is currently rendered in the DOM
@@ -287,6 +288,12 @@ function showFormError(msg){
   setTimeout(()=>{el.style.display='none';},4000);
 }
 
+function addrLink(addr){
+  if(!addr)return'';
+  const url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(addr);
+  return`<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">${addr} <span style="font-size:10px">↗</span></a>`;
+}
+
 // ─── DATA LOADING ────────────────────────────────────────────────
 async function loadData(){
   try{
@@ -314,18 +321,20 @@ async function loadData(){
 
 async function loadExtraData(){
   try{
-    const[tRes,aRes,iRes,kRes,uRes]=await Promise.all([
+    const[tRes,aRes,iRes,kRes,uRes,stRes]=await Promise.all([
       API.req('GET','/teams').catch(()=>({data:[]})),
       API.req('GET','/agreements').catch(()=>({data:[]})),
       API.req('GET','/intake-submissions').catch(()=>({data:[]})),
       API.req('GET','/kb').catch(()=>({data:{procedures:[],dtcMaps:[],fileLibrary:[]}})),
-      API.req('GET','/users').catch(()=>({data:[]}))
+      API.req('GET','/users').catch(()=>({data:[]})),
+      API.req('GET','/service-types').catch(()=>({types:state.serviceTypes}))
     ]);
     state.teams=tRes.data||[];
     state.users=uRes.data||[];
     state.agreements=aRes.data||[];
     state.intakeSubs=iRes.data||[];
     state.kb=kRes.data||{procedures:[],dtcMaps:[],fileLibrary:[]};
+    if(stRes.types)state.serviceTypes=stRes.types;
     if(!FORM_VIEWS.has(getTargetView()))render();
   }catch(e){}
 }
@@ -549,7 +558,7 @@ function renderJobDetail(){
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Service Type</label>
-            <select id="ej_type"><option ${(j.type||'')==='ECU Programming'?'selected':''}>ECU Programming</option><option ${(j.type||'')==='Module Cloning'?'selected':''}>Module Cloning</option><option ${(j.type||'')==='ECU Adaptation'?'selected':''}>ECU Adaptation</option><option ${(j.type||'')==='GPEC2 Unlock'?'selected':''}>GPEC2 Unlock</option><option ${(j.type||'')==='ADAS Calibration'?'selected':''}>ADAS Calibration</option><option ${(j.type||'')==='Electrical Diagnostics'?'selected':''}>Electrical Diagnostics</option><option ${(j.type||'')==='Key Programming'?'selected':''}>Key Programming</option><option ${(j.type||'')==='BCM Programming'?'selected':''}>BCM Programming</option><option ${(j.type||'')==='TCM Programming'?'selected':''}>TCM Programming</option><option ${(j.type||'')==='Other'?'selected':''}>Other</option></select>
+            <select id="ej_type">${state.serviceTypes.map(t=>`<option ${(j.type||'')===t?'selected':''}>${t}</option>`).join('')}</select>
           </div>
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">ECU / Module</label><input id="ej_ecu" value="${j.ecu||''}" style="font-size:14px;padding:10px"></div>
         </div>
@@ -583,7 +592,7 @@ function renderJobDetail(){
           <div><span style="color:var(--muted)">Amount:</span> ${fmtMoney(j.amount)}</div>
           <div><span style="color:var(--muted)">Priority:</span> ${j.priority||'Medium'}</div>
         </div>
-        ${j.serviceAddress?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">📍 ${j.serviceAddress}</div>`:''}
+        ${j.serviceAddress?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">📍 ${addrLink(j.serviceAddress)}</div>`:''}
         ${(()=>{
           const cust=state.customers.find(c=>c.name===j.customer);
           if(!cust)return '';
@@ -591,7 +600,7 @@ function renderJobDetail(){
             <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">CUSTOMER</div>
             ${cust.phone?`<div style="font-size:12px;margin-bottom:2px"><a href="tel:${cust.phone}" style="color:var(--blue);text-decoration:none">📞 ${cust.phone}</a></div>`:''}
             ${cust.email?`<div style="font-size:12px;margin-bottom:2px"><a href="mailto:${cust.email}" style="color:var(--blue);text-decoration:none">✉ ${cust.email}</a></div>`:''}
-            ${cust.address?`<div style="font-size:12px;color:var(--dim)">📍 ${cust.address}</div>`:''}
+            ${cust.address?`<div style="font-size:12px;color:var(--dim)">📍 ${addrLink(cust.address)}</div>`:''}
           </div>`;
         })()}
       </div>
@@ -773,7 +782,7 @@ function renderCustomers(){
       `:`
         ${c.phone?`<div style="font-size:13px;margin-bottom:2px"><a href="tel:${c.phone}" style="color:var(--blue);text-decoration:none">📞 ${c.phone}</a></div>`:''}
         ${c.email?`<div style="font-size:13px;margin-bottom:2px"><a href="mailto:${c.email}" style="color:var(--blue);text-decoration:none">✉ ${c.email}</a></div>`:''}
-        ${c.address?`<div style="font-size:12px;color:var(--dim);margin-top:4px">📍 ${c.address}</div>`:`<div style="font-size:12px;color:var(--dim);margin-top:4px;font-style:italic">No address — tap ✎ to add</div>`}
+        ${c.address?`<div style="font-size:12px;color:var(--dim);margin-top:4px">📍 ${addrLink(c.address)}</div>`:`<div style="font-size:12px;color:var(--dim);margin-top:4px;font-style:italic">No address — tap ✎ to add</div>`}
       `}
     </div>`;
   }).join('')}
@@ -926,7 +935,7 @@ function renderNewJob(){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Service Type</label>
-        <select id="nj_type"><option ${(d.type||'')==='ECU Programming'?'selected':''}>ECU Programming</option><option ${(d.type||'')==='Module Cloning'?'selected':''}>Module Cloning</option><option ${(d.type||'')==='ECU Adaptation'?'selected':''}>ECU Adaptation</option><option ${(d.type||'')==='GPEC2 Unlock'?'selected':''}>GPEC2 Unlock</option><option ${(d.type||'')==='ADAS Calibration'?'selected':''}>ADAS Calibration</option><option ${(d.type||'')==='Electrical Diagnostics'?'selected':''}>Electrical Diagnostics</option><option ${(d.type||'')==='Key Programming'?'selected':''}>Key Programming</option><option ${(d.type||'')==='BCM Programming'?'selected':''}>BCM Programming</option><option ${(d.type||'')==='TCM Programming'?'selected':''}>TCM Programming</option><option ${(d.type||'')==='Other'?'selected':''}>Other</option></select>
+        <select id="nj_type">${state.serviceTypes.map(t=>`<option ${(d.type||'')===t?'selected':''}>${t}</option>`).join('')}</select>
       </div>
       <div><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Modules / ECU</label><input id="nj_ecu" placeholder="PCM, BCM..." value="${d.ecu||''}"></div>
     </div>
@@ -1020,7 +1029,7 @@ function renderEstimates(){
         </div>
       </div>
       ${(est.phone||linkedCust?.phone)?`<div style="font-size:11px;color:var(--dim);margin-top:6px">📱 ${est.phone||linkedCust?.phone||''} ${(est.email||linkedCust?.email)?'· ✉ '+(est.email||linkedCust?.email):''}</div>`:''}
-      ${linkedCust?.address?`<div style="font-size:11px;color:var(--dim);margin-top:2px">📍 ${linkedCust.address}</div>`:''}
+      ${linkedCust?.address?`<div style="font-size:11px;color:var(--dim);margin-top:2px">📍 ${addrLink(linkedCust.address)}</div>`:''}
       ${est.notes?`<div style="font-size:11px;color:var(--yellow);margin-top:4px;font-style:italic">📝 ${est.notes.substring(0,80)}${est.notes.length>80?'...':''}</div>`:''}
       <div style="display:flex;gap:6px;margin-top:8px">
         <select data-eststatus="${est.id}" style="padding:6px 10px;font-size:11px;border-radius:6px;flex:1">
@@ -1076,7 +1085,7 @@ function renderNewEstimate(){
     <div style="font-size:13px;color:var(--muted);font-weight:600;margin:16px 0 12px">SERVICE DETAILS</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Service Type</label>
-        <select id="ne_type"><option ${(!est||est.service_type==='ECU Programming')?'selected':''}>ECU Programming</option><option ${est?.service_type==='Module Cloning'?'selected':''}>Module Cloning</option><option ${est?.service_type==='ECU Adaptation'?'selected':''}>ECU Adaptation</option><option ${est?.service_type==='GPEC2 Unlock'?'selected':''}>GPEC2 Unlock</option><option ${est?.service_type==='ADAS Calibration'?'selected':''}>ADAS Calibration</option><option ${est?.service_type==='Electrical Diagnostics'?'selected':''}>Electrical Diagnostics</option><option ${est?.service_type==='Key Programming'?'selected':''}>Key Programming</option><option ${est?.service_type==='BCM Programming'?'selected':''}>BCM Programming</option><option ${est?.service_type==='TCM Programming'?'selected':''}>TCM Programming</option><option ${est?.service_type==='Other'?'selected':''}>Other</option></select>
+        <select id="ne_type">${state.serviceTypes.map(t=>`<option ${(est?.service_type||'ECU Programming')===t?'selected':''}>${t}</option>`).join('')}</select>
       </div>
       <div><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Modules / ECU</label><input id="ne_modules" value="${d.modules||est?.modules||''}" placeholder="PCM, BCM..."></div>
     </div>
@@ -1309,7 +1318,7 @@ function renderRouteMap(){
         <button class="btn-s btn-sm" data-routeremoveday="${j.id}" style="font-size:11px;color:var(--red)">✕</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:4px">📍 ${j.serviceAddress}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">📍 ${addrLink(j.serviceAddress)}</div>
     ${j.scheduledStart?`<div style="font-size:11px;color:var(--accent);margin-top:2px;font-family:monospace">🕐 ${j.scheduledStart}${j.scheduledEnd?' – '+j.scheduledEnd:''}</div>`:''}
   </div>`).join('')}
   </div>
@@ -1318,7 +1327,7 @@ function renderRouteMap(){
   ${noDateJobs.slice(0,15).map(j=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
     <div style="flex:1;overflow:hidden">
       <div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${j.id} — ${j.vehicle||''}</div>
-      <div style="font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${j.serviceAddress}</div>
+      <div style="font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${addrLink(j.serviceAddress)}</div>
     </div>
     <button class="btn btn-sm" data-routeaddday="${j.id}" style="font-size:10px;padding:3px 8px;white-space:nowrap;margin-left:6px">+ Add</button>
   </div>`).join('')}
@@ -1381,7 +1390,7 @@ function renderCalendar(){
     </div>
     <div style="font-size:14px;font-weight:600;color:var(--text);margin-top:4px">${j.vehicle||''}</div>
     <div style="font-size:12px;color:var(--dim)">${j.customer||''}</div>
-    ${j.serviceAddress?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📍 ${j.serviceAddress}</div>`:''}
+    ${j.serviceAddress?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📍 ${addrLink(j.serviceAddress)}</div>`:''}
   </div>`).join('')}
   ${unscheduled.length>0?`
   <div style="font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px">Unscheduled (${unscheduled.length})</div>
@@ -1518,7 +1527,7 @@ function renderIntake(){
       ${s.description?`<div style="font-size:12px;color:var(--dim);margin-bottom:6px">${s.description}</div>`:''}
       ${s.phone?`<div style="font-size:12px;margin-bottom:2px"><a href="tel:${s.phone}" style="color:var(--blue);text-decoration:none">📞 ${s.phone}</a></div>`:''}
       ${s.email?`<div style="font-size:12px;margin-bottom:2px"><a href="mailto:${s.email}" style="color:var(--blue);text-decoration:none">✉ ${s.email}</a></div>`:''}
-      ${s.service_address?`<div style="font-size:11px;color:var(--dim);margin-top:4px">📍 ${s.service_address}</div>`:''}
+      ${s.service_address?`<div style="font-size:11px;color:var(--dim);margin-top:4px">📍 ${addrLink(s.service_address)}</div>`:''}
       <div style="display:flex;gap:6px;margin-top:8px">
         <select data-intakestatus="${s.id}" style="flex:1;padding:8px;font-size:12px">
           ${['New','Contacted','Converted','Declined'].map(st=>`<option ${s.status===st?'selected':''}>${st}</option>`).join('')}
