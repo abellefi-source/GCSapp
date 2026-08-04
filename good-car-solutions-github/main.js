@@ -249,6 +249,26 @@ ipcMain.handle("data:import", async () => {
   }
   return { success: false };
 });
+ipcMain.handle("data:backupDatabase", async () => {
+  const documentsPath = app.getPath("documents");
+  const backupDir = path.join(documentsPath, "GCS Database Backups");
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupName = `gcs-database-backup-${timestamp}.db`;
+  const backupPath = path.join(backupDir, backupName);
+  const dbPath = path.join(require("os").homedir(), ".gcs-server", "gcs-data.db");
+  const localDbPath = path.join(app.getPath("userData"), "gcs-data.db");
+  const sourceDb = fs.existsSync(dbPath) ? dbPath : (fs.existsSync(localDbPath) ? localDbPath : null);
+  if (!sourceDb) {
+    return { success: false, error: "No database file found to backup" };
+  }
+  try {
+    fs.copyFileSync(sourceDb, backupPath);
+    return { success: true, path: backupPath, folder: backupDir, filename: backupName };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
 ipcMain.handle("data:getStorePath", () => store.path);
 ipcMain.handle("data:openStoreFolder", () => { shell.showItemInFolder(store.path); return true; });
 

@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld("gcs", {
   data: {
     export: () => ipcRenderer.invoke("data:export"),
     import: () => ipcRenderer.invoke("data:import"),
+    backupDatabase: () => ipcRenderer.invoke("data:backupDatabase"),
     getStorePath: () => ipcRenderer.invoke("data:getStorePath"),
     openStoreFolder: () => ipcRenderer.invoke("data:openStoreFolder")
   },

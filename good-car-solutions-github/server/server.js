@@ -10,7 +10,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { getDb, query, run, getSetting, setSetting, saveDb, DATA_HOME } = require("./db");
+const { getDb, query, run, getSetting, setSetting, saveDb, DB_PATH, DATA_HOME } = require("./db");
 
 const app = express();
 const PORT = process.env.GCS_PORT || 3377;
@@ -405,6 +405,49 @@ app.get("/api/settings", authRequired, (req, res) => {
 app.put("/api/settings", authRequired, adminOnly, (req, res) => {
   for (const [k, v] of Object.entries(req.body)) setSetting(k, v);
   res.json({ success: true });
+});
+
+// ─── DATABASE BACKUP ─────────────────────────────────────────────
+app.post("/api/backup/database", authRequired, adminOnly, (req, res) => {
+  try {
+    saveDb();
+    const backupDir = path.join(DATA_HOME, "backups");
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupName = `gcs-database-backup-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupName);
+    fs.copyFileSync(DB_PATH, backupPath);
+    res.json({ success: true, path: backupPath, filename: backupName });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/backup/list", authRequired, adminOnly, (req, res) => {
+  try {
+    const backupDir = path.join(DATA_HOME, "backups");
+    if (!fs.existsSync(backupDir)) return res.json({ backups: [] });
+    const files = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith("gcs-database-backup-") && f.endsWith(".db"))
+      .map(f => {
+        const stat = fs.statSync(path.join(backupDir, f));
+        return { filename: f, size: stat.size, created: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.created.localeCompare(a.created));
+    res.json({ backups: files });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/backup/download/:filename", authRequired, adminOnly, (req, res) => {
+  const filename = path.basename(req.params.filename);
+  if (!filename.startsWith("gcs-database-backup-") || !filename.endsWith(".db")) {
+    return res.status(400).json({ error: "Invalid backup filename" });
+  }
+  const backupPath = path.join(DATA_HOME, "backups", filename);
+  if (!fs.existsSync(backupPath)) return res.status(404).json({ error: "Backup not found" });
+  res.download(backupPath, filename);
 });
 
 // ─── INVOICE NUMBER ──────────────────────────────────────────────
