@@ -89,6 +89,25 @@ button{cursor:pointer;border:none;border-radius:8px;font-weight:600;font-size:14
 /* File staging */
 .staged-file{display:flex;align-items:center;gap:8px;padding:8px;background:#111820;border-radius:6px;margin-bottom:4px;font-size:12px;color:var(--text)}
 .staged-file .remove{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 4px}
+/* Light month calendar (Schedule tab) */
+.mcal{background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:12px;color:#0f172a;user-select:none;-webkit-user-select:none;margin-bottom:10px;box-shadow:0 4px 20px rgba(0,0,0,0.35)}
+.mcal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mcal-title{font-size:17px;font-weight:700;color:#0f172a}
+.mcal-nav{width:40px;height:40px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:20px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;padding:0}
+.mcal-nav:active{background:#ffedd5;border-color:#f97316;color:#ea580c}
+.mcal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+.mcal-week span{text-align:center;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+.mcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.mcal-day{min-height:46px;border:1px solid transparent;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:15px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px}
+.mcal-day:active{background:#ffedd5;border-color:#fdba74}
+.mcal-day.today{border-color:#f97316;color:#ea580c}
+.mcal-day.selected{background:#f97316;border-color:#f97316;color:#fff}
+.mcal-cnt{font-size:10px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px;background:#ffedd5;color:#ea580c;white-space:nowrap}
+.mcal-day.selected .mcal-cnt{background:rgba(255,255,255,0.25);color:#fff}
+.mcal-foot{margin-top:10px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:13px;color:#0f172a;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.mcal-foot strong{color:#ea580c}
+.mcal-today-btn{padding:7px 12px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.mcal-today-btn:active{background:#ffedd5;border-color:#f97316}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -1347,26 +1366,30 @@ function renderCalendar(){
     <h2 style="font-size:18px;font-weight:700;margin:0">Schedule</h2>
     <button class="btn btn-sm" id="calSchedBtn">+ Schedule Job</button>
   </div>
-  <div class="card" style="padding:12px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <button class="btn-s btn-sm" id="calPrev">‹</button>
-      <span style="font-size:15px;font-weight:700">${monthLabel}</span>
-      <button class="btn-s btn-sm" id="calNext">›</button>
+  <div class="mcal">
+    <div class="mcal-head">
+      <button class="mcal-nav" id="calPrev" aria-label="Previous month">‹</button>
+      <span class="mcal-title">${monthLabel}</span>
+      <button class="mcal-nav" id="calNext" aria-label="Next month">›</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">
-      ${['S','M','T','W','T','F','S'].map(d=>`<div style="text-align:center;font-size:10px;color:var(--muted);padding:4px;font-weight:600">${d}</div>`).join('')}
+    <div class="mcal-week">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<span>${d}</span>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
+    <div class="mcal-grid">
       ${days.map(d=>{
         if(!d)return '<div></div>';
         const ds=`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const isToday=ds===today;const isSel=ds===sel;
         const cnt=state.jobs.filter(j=>j.date===ds).length;
-        return `<div data-calday="${ds}" style="padding:6px 2px;text-align:center;border-radius:8px;cursor:pointer;background:${isSel?'var(--accent)':isToday?'var(--border)':'transparent'};border:1px solid ${isSel?'var(--accent)':isToday?'var(--accent)':'transparent'};min-height:38px">
-          <div style="font-size:13px;color:${isSel?'#fff':'var(--text)'};font-weight:${isToday||isSel?700:400}">${d}</div>
-          ${cnt>0?`<div style="font-size:9px;color:${isSel?'#fff':'var(--accent)'}">●${cnt}</div>`:''}
+        return `<div data-calday="${ds}" class="mcal-day${isToday?' today':''}${isSel?' selected':''}">
+          <div>${d}</div>
+          ${cnt>0?`<div class="mcal-cnt" title="${cnt} job${cnt!==1?'s':''}">● ${cnt}</div>`:''}
         </div>`;
       }).join('')}
+    </div>
+    <div class="mcal-foot">
+      <div>Selected: <strong>${new Date(sel+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</strong></div>
+      ${(sel!==today||yr!==new Date().getFullYear()||mo!==new Date().getMonth())?`<button class="mcal-today-btn" id="calToday">Today</button>`:''}
     </div>
   </div>
   <div style="font-size:13px;font-weight:700;color:var(--text);margin:12px 0 8px">${new Date(sel+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} — ${dayJobs.length} job${dayJobs.length!==1?'s':''}</div>
@@ -2527,6 +2550,8 @@ function bindEvents(){
   if(calPrev)calPrev.onclick=()=>{let m=state.calMonth-1;let y=state.calYear;if(m<0){m=11;y--;}setState({calMonth:m,calYear:y});};
   const calNext=document.getElementById('calNext');
   if(calNext)calNext.onclick=()=>{let m=state.calMonth+1;let y=state.calYear;if(m>11){m=0;y++;}setState({calMonth:m,calYear:y});};
+  const calTodayBtn=document.getElementById('calToday');
+  if(calTodayBtn)calTodayBtn.onclick=()=>{const n=new Date();setState({calDate:n.toISOString().split('T')[0],calMonth:n.getMonth(),calYear:n.getFullYear()});};
   const calSchedBtn=document.getElementById('calSchedBtn');
   if(calSchedBtn)calSchedBtn.onclick=()=>setState({showSchedPick:true});
   const schedCancel=document.getElementById('schedCancel');
