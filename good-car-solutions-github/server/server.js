@@ -1480,6 +1480,27 @@ textarea{resize:vertical;min-height:80px}
 .btn{display:block;width:100%;padding:16px;font-size:16px;font-weight:700;background:#f97316;color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:inherit}
 .btn:hover{background:#ea580c}
 .btn:disabled{opacity:0.5;cursor:not-allowed}
+.cal{background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;color:#0f172a;user-select:none;box-shadow:0 4px 20px rgba(0,0,0,0.35)}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-title{font-size:17px;font-weight:700;color:#0f172a}
+.cal-nav{width:40px;height:40px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:18px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center}
+.cal-nav:hover{background:#ffedd5;border-color:#f97316;color:#ea580c}
+.cal-nav:disabled{opacity:0.35;cursor:not-allowed;background:#f8fafc;border-color:#e2e8f0;color:#0f172a}
+.cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}
+.cal-week span{text-align:center;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-day{height:44px;border:1px solid transparent;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center}
+.cal-day:hover{background:#ffedd5;border-color:#fdba74}
+.cal-day.other{background:transparent;color:#cbd5e1;font-weight:400}
+.cal-day.past{background:transparent;color:#cbd5e1;font-weight:400;cursor:not-allowed}
+.cal-day.past:hover{background:transparent;border-color:transparent}
+.cal-day.today{border-color:#f97316;color:#ea580c}
+.cal-day.selected,.cal-day.selected:hover{background:#f97316;border-color:#f97316;color:#fff}
+.cal-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:14px;color:#0f172a;flex-wrap:wrap}
+.cal-foot strong{color:#ea580c}
+.cal-clear{padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;color:#0f172a;font-size:13px;cursor:pointer;font-family:inherit}
+.cal-clear:hover{background:#ffedd5;border-color:#f97316}
+.cal-hint{font-size:12px;color:#94a3b8;margin-top:8px}
 .success{text-align:center;padding:60px 20px}
 .success h2{color:#4ade80;font-size:24px;margin-bottom:8px}
 .success p{color:#94a3b8;font-size:14px;line-height:1.6}
@@ -1534,16 +1555,30 @@ textarea{resize:vertical;min-height:80px}
 
     <div class="card">
       <div class="section-title">Scheduling Preference</div>
-      <div class="row">
-        <div class="field"><label>Preferred Date</label><input id="f_date" type="date"></div>
-        <div class="field"><label>Preferred Time</label>
-          <select id="f_time">
-            <option value="">Flexible</option>
-            <option>Morning (8am-12pm)</option>
-            <option>Afternoon (12pm-5pm)</option>
-            <option>Evening (5pm-8pm)</option>
-          </select>
+      <div class="field"><label>Preferred Day</label>
+        <input id="f_date" type="hidden">
+        <div class="cal" id="cal">
+          <div class="cal-head">
+            <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month" onclick="calMove(-1)">&#8249;</button>
+            <div class="cal-title" id="calTitle"></div>
+            <button type="button" class="cal-nav" id="calNext" aria-label="Next month" onclick="calMove(1)">&#8250;</button>
+          </div>
+          <div class="cal-week"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-foot">
+            <div id="calSelected">No day selected &middot; we'll work around your schedule</div>
+            <button type="button" class="cal-clear" id="calClear" onclick="calClear()" style="display:none">Clear</button>
+          </div>
         </div>
+        <div class="cal-hint">Tap a day to pick it. Leave it blank if you're flexible.</div>
+      </div>
+      <div class="field"><label>Preferred Time</label>
+        <select id="f_time">
+          <option value="">Flexible</option>
+          <option>Morning (8am-12pm)</option>
+          <option>Afternoon (12pm-5pm)</option>
+          <option>Evening (5pm-8pm)</option>
+        </select>
       </div>
       <div class="field"><label>Service Address (we come to you)</label><input id="f_address" placeholder="Street address, city, state"></div>
     </div>
@@ -1565,6 +1600,55 @@ textarea{resize:vertical;min-height:80px}
 </div>
 
 <script>
+var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+var calToday=new Date();calToday.setHours(0,0,0,0);
+var calView=new Date(calToday.getFullYear(),calToday.getMonth(),1);
+var calSel=null;
+function pad2(n){return (n<10?'0':'')+n;}
+function calKey(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+function calRender(){
+  var y=calView.getFullYear(),m=calView.getMonth();
+  document.getElementById('calTitle').textContent=MONTHS[m]+' '+y;
+  document.getElementById('calPrev').disabled=(y===calToday.getFullYear()&&m===calToday.getMonth());
+  var first=new Date(y,m,1);
+  var start=new Date(y,m,1-first.getDay());
+  var grid=document.getElementById('calGrid');
+  grid.innerHTML='';
+  for(var i=0;i<42;i++){
+    var d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    if(i>=35&&d.getMonth()!==m)break;
+    var b=document.createElement('button');
+    b.type='button';b.className='cal-day';b.textContent=d.getDate();
+    var isPast=d<calToday;
+    if(d.getMonth()!==m)b.className+=' other';
+    if(isPast)b.className+=' past';
+    if(d.getTime()===calToday.getTime())b.className+=' today';
+    if(calSel&&d.getTime()===calSel.getTime())b.className+=' selected';
+    if(isPast){b.disabled=true;}
+    else{b.setAttribute('data-key',calKey(d));b.setAttribute('aria-label',DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate());b.onclick=calPick;}
+    grid.appendChild(b);
+  }
+  var lbl=document.getElementById('calSelected');
+  var clr=document.getElementById('calClear');
+  if(calSel){
+    lbl.innerHTML='Selected: <strong>'+DAYS[calSel.getDay()]+', '+MONTHS[calSel.getMonth()]+' '+calSel.getDate()+', '+calSel.getFullYear()+'</strong>';
+    clr.style.display='';
+  }else{
+    lbl.innerHTML="No day selected &middot; we'll work around your schedule";
+    clr.style.display='none';
+  }
+}
+function calPick(e){
+  var k=e.currentTarget.getAttribute('data-key').split('-');
+  calSel=new Date(+k[0],+k[1]-1,+k[2]);
+  calView=new Date(calSel.getFullYear(),calSel.getMonth(),1);
+  document.getElementById('f_date').value=calKey(calSel);
+  calRender();
+}
+function calClear(){calSel=null;document.getElementById('f_date').value='';calRender();}
+function calMove(n){calView=new Date(calView.getFullYear(),calView.getMonth()+n,1);calRender();}
+calRender();
 async function submitForm(){
   const name=document.getElementById('f_name').value.trim();
   const phone=document.getElementById('f_phone').value.trim();
